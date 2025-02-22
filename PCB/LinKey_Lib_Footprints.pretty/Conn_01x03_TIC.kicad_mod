@@ -1,0 +1,117 @@
+(footprint "Conn_01x03_TIC"
+	(version 20241229)
+	(generator "pcbnew")
+	(generator_version "9.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at -11 -4.5 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "b2680e3d-3361-41ce-ab6e-bcfeb04426ee")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "Conn_01x03_TIC"
+		(at -4.5 5.5 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "2312c947-cedc-4643-939a-9ef5aa1813ab")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "a511c3c2-a200-4e9a-90d9-422080ffb763")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "6fe432bb-711b-463d-b53d-2825e653f073")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(fp_rect
+		(start -13 -3.5)
+		(end 3 3.5)
+		(stroke
+			(width 0.05)
+			(type default)
+		)
+		(fill no)
+		(layer "F.CrtYd")
+		(uuid "d784c9b1-67d8-46f8-a1d6-f9b71ee5c109")
+	)
+	(fp_text user "${REFERENCE}"
+		(at -5 3 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "eead60e1-2089-4551-ad70-3f707cdf5b37")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole rect
+		(at 0 0)
+		(size 3.4 3.4)
+		(drill 1.8)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(thermal_bridge_angle 45)
+		(uuid "9f7722a4-ed45-4014-b99d-9debf8509063")
+	)
+	(pad "2" thru_hole circle
+		(at -5.08 0)
+		(size 3.4 3.4)
+		(drill 1.8)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "448cb558-78fd-4b19-9161-4207d09665f0")
+	)
+	(pad "3" thru_hole circle
+		(at -10.16 0)
+		(size 3.4 3.4)
+		(drill 1.8)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "70460604-0bf9-4648-a76f-dde8f48703b4")
+	)
+	(embedded_fonts no)
+	(model "${KIPRJMOD}/3D step files/Conn_01x03.step"
+		(offset
+			(xyz 0 0 -2.5)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 -0 -180)
+		)
+	)
+)

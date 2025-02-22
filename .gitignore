@@ -1,0 +1,11 @@
+*-backups/
+
+PCB/fp-info-cache
+PCB/fp-lib-table
+PCB/sym-lib-table
+PCB/*.kicad_pcb-bak
+PCB/*.lck
+PCB/*.bak
+PCB/*.kicad_prl
+
+PCB/MCAD files/*.FCBak
