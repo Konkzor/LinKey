@@ -1,0 +1,103 @@
+esphome:
+  name: linky-key
+  friendly_name: Linky key
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "hnhOPr8AVj3H+/++35L82jfQAzn1Ew6uJqO7xcEv0GU="
+
+ota:
+  - platform: esphome
+    password: "1cf6aa9910fa936e17bede64a23f6101"
+
+wifi:
+  ssid: Livebox-BDE0
+  password: tfHSCvFjtTDJrvxKuw
+  output_power: 8.5dB
+
+# Enable Home Assistant API
+switch:
+  - platform: gpio
+    pin:
+      number: 8
+      mode: output
+    id: blueLED
+
+interval:
+  - interval: 500ms
+    then:
+      - switch.toggle: blueLED
+
+uart:
+  id: UART2
+  baud_rate: 1200
+  tx_pin: 10
+  rx_pin: 9
+  data_bits: 7
+  parity: EVEN
+  stop_bits: 1
+  #rx_buffer_size
+  debug:
+    direction: RX
+    dummy_receiver: true
+    after:
+      delimiter: "\r\n"
+    sequence:
+      - lambda: |-
+          UARTDebug::log_string(direction, bytes);
+          const char label_iinst[] = "IINST";
+          const char label_base[] = "BASE";
+          char label[10];
+          int data=0;
+          char cs=0;
+          std::string log(bytes.begin(), bytes.end());
+          
+          //Format
+          //"label data cs\r\n"
+          //"IINST 000 W\r\n"
+          // Checksum = (S1 & 0x3F) + 0x20
+          if (sscanf(log.c_str(), "%s %d %c", label, &data, &cs) == 3 ) {
+            // 1. Compute checksum
+            int S1 = 0;
+            std::for_each(bytes.begin(), bytes.end()-4, [&] (int n) { //-4 to remove space+cs+CR+LF
+                S1 += n;
+            });
+
+            // 2. Control checksum
+            if((S1 & 0x3F) + 0x20 == cs){
+              if(strcmp(label, label_iinst) == 0) {
+                id(iinst).publish_state(data); 
+              }
+              if(strcmp(label, label_base) == 0) {
+                id(base).publish_state(data); 
+              }
+            }
+          }
+
+sensor:
+  - platform: template
+    name: "I INST"
+    id: "iinst"
+  - platform: template
+    name: "BASE"
+    id: "base"
+  - platform: template
+    name: "Wakeup Cause"
+    accuracy_decimals: 0
+    lambda: return esp_sleep_get_wakeup_cause();
+
+
+deep_sleep:
+  sleep_duration: 10s
+  run_duration: 10s
+  id: deep_sleep_1
+    

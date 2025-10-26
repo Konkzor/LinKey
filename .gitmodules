@@ -1,0 +1,3 @@
+[submodule "Firmware/HULP"]
+	path = Firmware/HULP
+	url = git@github.com:boarchuz/HULP.git

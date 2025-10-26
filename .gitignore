@@ -9,3 +9,10 @@ PCB/*.bak
 PCB/*.kicad_prl
 
 PCB/MCAD files/*.FCBak
+
+# Firmware
+Firmware/build/
+Firmware/sdkconfig*
+
+# VS Code
+.vscode/
