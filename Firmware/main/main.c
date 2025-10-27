@@ -104,11 +104,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
 static void wifi_init_sta(void)
 {
-#if !USE_LIGHT_SLEEP
+
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-#endif
 
     esp_netif_t *netif = esp_netif_create_default_wifi_sta();
 
@@ -122,7 +121,6 @@ static void wifi_init_sta(void)
     DEBUG_LOG(TAG, "Static IP: %s", CONFIG_LINKY_STATIC_IP);
 #endif
 
-#if !USE_LIGHT_SLEEP
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     cfg.nvs_enable = 0;
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -139,7 +137,7 @@ static void wifi_init_sta(void)
                                                         &wifi_event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-#endif
+
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -170,7 +168,6 @@ static void wifi_init_sta(void)
     // Start WiFi
     ESP_ERROR_CHECK(esp_wifi_start());
 
-#if !USE_LIGHT_SLEEP
     EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
             WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
             pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
@@ -178,9 +175,6 @@ static void wifi_init_sta(void)
     if (!(bits & WIFI_CONNECTED_BIT)) {
         ESP_LOGW(TAG, "WiFi connection timeout");
     }
-#else
-    vTaskDelay(pdMS_TO_TICKS(100));
-#endif
 }
 
 static void mqtt_init(void)
@@ -281,31 +275,24 @@ static void enter_sleep(void)
 
 void app_main(void)
 {
+    linky_data_t linky_data;
+
     // Print wake-up reason
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-
-#if USE_LIGHT_SLEEP
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_ULP) {
-        DEBUG_LOG(TAG, "Light sleep wake-up from ULP");
-    } else {
-        DEBUG_LOG(TAG, "Initial boot (light sleep mode)");
-    }
-#else
     switch (wakeup_reason) {
         case ESP_SLEEP_WAKEUP_ULP:
-            DEBUG_LOG(TAG, "Deep sleep wake-up from ULP");
+            DEBUG_LOG(TAG, "Wake-up from ULP");
             break;
         case ESP_SLEEP_WAKEUP_TIMER:
-            DEBUG_LOG(TAG, "Deep sleep wake-up from timer");
+            DEBUG_LOG(TAG, "Wake-up from timer");
             break;
         case ESP_SLEEP_WAKEUP_UNDEFINED:
         default:
-            DEBUG_LOG(TAG, "Initial boot (deep sleep mode)");
+            DEBUG_LOG(TAG, "Initial boot");
             break;
     }
-#endif
 
-    // Initialize NVS
+    // Initialize NVS (used for Wifi)
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         ESP_ERROR_CHECK(nvs_flash_erase());
@@ -315,70 +302,32 @@ void app_main(void)
 
 #if USE_LIGHT_SLEEP
     // Light sleep mode: Initialize once and loop forever
-    if (!wifi_mqtt_initialized) {
-        DEBUG_LOG(TAG, "First boot - initializing WiFi/MQTT/ULP");
+    DEBUG_LOG(TAG, "First boot - initializing WiFi/MQTT/ULP");
 
-        // Configure automatic power management for light sleep
-        esp_pm_config_t pm_config = {
-            .max_freq_mhz = 160,      // Max CPU frequency
-            .min_freq_mhz = 40,       // Min CPU frequency (APB will be 40MHz)
-            .light_sleep_enable = true // Enable automatic light sleep
-        };
-        ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
-        DEBUG_LOG(TAG, "Power management configured: auto light sleep enabled");
+    // Configure automatic power management for light sleep
+    esp_pm_config_t pm_config = {
+        .max_freq_mhz = 160,      // Max CPU frequency
+        .min_freq_mhz = 40,       // Min CPU frequency (APB will be 40MHz)
+        .light_sleep_enable = true // Enable automatic light sleep
+    };
+    ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
+    DEBUG_LOG(TAG, "Power management configured: auto light sleep enabled");
 
-        // Initialize netif and event loop once
-        ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
-        s_wifi_event_group = xEventGroupCreate();
+    // Connect to WiFi (with fast scan and power save)
+    wifi_init_sta();
 
-        // Initialize WiFi driver once
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        cfg.nvs_enable = 0;
-        ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    // Initialize MQTT once
+    mqtt_init();
 
-        // Register event handlers
-        esp_event_handler_instance_t instance_any_id;
-        esp_event_handler_instance_t instance_got_ip;
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                            ESP_EVENT_ANY_ID,
-                                                            &wifi_event_handler,
-                                                            NULL,
-                                                            &instance_any_id));
-        ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                            IP_EVENT_STA_GOT_IP,
-                                                            &wifi_event_handler,
-                                                            NULL,
-                                                            &instance_got_ip));
+    // Initialize ULP
+    init_ulp_linky();
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
-        // Connect to WiFi (with fast scan and power save)
-        wifi_init_sta();
-
-        // Wait for WiFi connection
-        EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                pdFALSE, pdFALSE, pdMS_TO_TICKS(10000));
-
-        if (!(bits & WIFI_CONNECTED_BIT)) {
-            ESP_LOGE(TAG, "WiFi connection failed - restarting");
-            esp_restart();
-        }
-
-        // Initialize MQTT once
-        mqtt_init();
-
-        // Initialize ULP
-        init_ulp_linky();
-        vTaskDelay(pdMS_TO_TICKS(1000));
-
-        wifi_mqtt_initialized = true;
-        DEBUG_LOG(TAG, "Initialization complete");
-    }
+    DEBUG_LOG(TAG, "Initialization complete");
 
     // Light sleep: Loop forever, waking up from ULP
     while (1) {
         // Get data from ULP
-        linky_data_t linky_data;
         get_linky_data(&linky_data);
 
         if (linky_data.valid_flags != 0) {
@@ -406,7 +355,6 @@ void app_main(void)
     }
 
     // Woke up from ULP - get data
-    linky_data_t linky_data;
     get_linky_data(&linky_data);
 
     if (linky_data.valid_flags != 0) {
@@ -425,5 +373,6 @@ void app_main(void)
 
     // Go back to deep sleep
     enter_sleep();
+    // Never reached
 #endif
 }
