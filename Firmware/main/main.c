@@ -246,7 +246,8 @@ static void enter_sleep(void)
     // Light sleep mode - WiFi/MQTT stay connected
     DEBUG_LOG(TAG, "Entering light sleep - WiFi/MQTT stay connected");
 
-    // Enable ULP wakeup
+    // Clear all pending wakeup conditions and enable ULP wakeup only
+    ESP_ERROR_CHECK(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL));
     ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
 
     // Enter light sleep (WiFi modem sleep handles power saving)
