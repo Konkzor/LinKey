@@ -169,6 +169,7 @@ void init_ulp_linky(void)
     // Labels for ULP program - follow HULP example pattern
     enum {
         LBL_RX_INIT,
+        LBL_MAIN_LOOP,
         LBL_RX_LINE1,
         LBL_RX_LINE2,
         LBL_RX_LINE3,
@@ -183,10 +184,13 @@ void init_ulp_linky(void)
     };
 
     const ulp_insn_t program[] = {
-        // Receive UART data into buffer using 7E1 format
+        // First receive: sync buffer to ensure we're aligned with Linky frame
         I_MOVO(R1, ulp_rx_buffer),
         M_RETURN(LBL_RX_INIT, R3, LBL_SUBROUTINE_RX_ENTRY),
-        // Receive UART data into buffer using 7E1 format
+
+        // Main loop: continuously receive into 10 ring buffers
+        M_LABEL(LBL_MAIN_LOOP),
+
         I_MOVO(R1, ulp_rx_line1),
         M_RETURN(LBL_RX_LINE1, R3, LBL_SUBROUTINE_RX_ENTRY),
         I_MOVO(R1, ulp_rx_line2),
@@ -207,9 +211,12 @@ void init_ulp_linky(void)
         M_RETURN(LBL_RX_LINE9, R3, LBL_SUBROUTINE_RX_ENTRY),
         I_MOVO(R1, ulp_rx_line10),
         M_RETURN(LBL_RX_LINE10, R3, LBL_SUBROUTINE_RX_ENTRY),
-        //Sleep
+
+        // Wake main CPU after receiving 10 lines
         I_WAKE(),
-        I_HALT(),
+
+        // Loop back to receive next 10 lines
+        M_BX(LBL_MAIN_LOOP),
 
         // UART RX subroutine - 7E1 format for Linky - LF as termination character
         M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, '\n'),
@@ -218,8 +225,8 @@ void init_ulp_linky(void)
     // Configure GPIO for RX (input with pullup)
     ESP_ERROR_CHECK(hulp_configure_pin(LINKY_RX_GPIO, RTC_GPIO_MODE_INPUT_ONLY, GPIO_PULLUP_ONLY, 0));
 
-    // Load and run ULP program peridically
-    ESP_ERROR_CHECK(hulp_ulp_load(program, sizeof(program), 10ULL * 1000 * 1000, 0));
+    // Load and run ULP program continuously (no periodic timer)
+    ESP_ERROR_CHECK(hulp_ulp_load(program, sizeof(program), 0, 0));
     ESP_ERROR_CHECK(hulp_ulp_run(0));
 
     DEBUG_LOG(TAG, "ULP started, monitoring GPIO %d at %d baud", LINKY_RX_GPIO, LINKY_BAUD_RATE);
