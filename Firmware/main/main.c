@@ -61,7 +61,9 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        // Nothing to do.
+#ifdef USE_LIGHT_SLEEP
+        esp_wifi_connect(); // FIXME: not sure it is called if disconnection happens during light sleep
+#endif
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         DEBUG_LOG(TAG, "WiFi connected - IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -147,6 +149,7 @@ static void wifi_init_sta(void)
             .scan_method = WIFI_FAST_SCAN,
             .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
             .bssid_set = 0,
+            .listen_interval = 10,  // Allow missing 10 beacons
         },
     };
 
@@ -161,7 +164,7 @@ static void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 
 #if USE_LIGHT_SLEEP
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MIN_MODEM));
+    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
     DEBUG_LOG(TAG, "WiFi modem sleep enabled");
 #endif
 
@@ -243,17 +246,16 @@ static void publish_linky_data(linky_data_t *data)
 static void enter_sleep(void)
 {
 #if USE_LIGHT_SLEEP
-    // Light sleep mode - WiFi/MQTT stay connected
-    DEBUG_LOG(TAG, "Entering light sleep - WiFi/MQTT stay connected");
+    // Light sleep mode - use automatic sleep via vTaskDelay
+    // The esp_pm_configure() with light_sleep_enable=true will
+    // automatically enter light sleep during idle periods
+    DEBUG_LOG(TAG, "Waiting for next ULP wakeup (auto light sleep enabled)");
 
-    // Clear all pending wakeup conditions and enable ULP wakeup only
-    ESP_ERROR_CHECK(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL));
-    ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
+    // Just delay - automatic light sleep will activate during idle
+    // WiFi will wake for beacons automatically without conflicting
+    vTaskDelay(pdMS_TO_TICKS(1000));  // 1 second delay, will auto-sleep
 
-    // Enter light sleep (WiFi modem sleep handles power saving)
-    esp_light_sleep_start();
-
-    DEBUG_LOG(TAG, "Woke from light sleep");
+    DEBUG_LOG(TAG, "Delay expired, checking for data");
 #else
     // Deep sleep mode - disconnect everything
     DEBUG_LOG(TAG, "Entering deep sleep - ULP will wake us up");
@@ -322,12 +324,15 @@ void app_main(void)
 
     // Initialize ULP
     init_ulp_linky();
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     DEBUG_LOG(TAG, "Initialization complete");
 
     // Light sleep: Loop forever, waking up from ULP
     while (1) {
+        // Enter light sleep (WiFi stays connected)
+        enter_sleep();
+        
         // Get data from ULP
         get_linky_data(&linky_data);
 
@@ -335,12 +340,40 @@ void app_main(void)
             DEBUG_LOG(TAG, "Linky data - IINST: %u A, BASE: %lu Wh",
                     linky_data.iinst, linky_data.base);
 
+            // Monitor Wifi connection
+            EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
+            if (!(bits & WIFI_CONNECTED_BIT)) {
+                DEBUG_LOG(TAG, "WiFi disconnected, reconnecting...");
+                // Don't call wifi_init_sta() - just reconnect!
+                xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
+                esp_wifi_connect();
+
+                // Wait for reconnection
+                bits = xEventGroupWaitBits(s_wifi_event_group,
+                    WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+                    pdFALSE, pdFALSE, pdMS_TO_TICKS(5000));
+
+                if (bits & WIFI_CONNECTED_BIT) {
+                    DEBUG_LOG(TAG, "WiFi reconnected");
+                } else {
+                    ESP_LOGW(TAG, "WiFi reconnect failed");
+                }
+            }
+            // Monitor MQTT connection
+            if (!mqtt_connected) {
+                DEBUG_LOG(TAG, "MQTT disconnected, reconnecting...");
+                // Stop and destroy old client first to avoid leak
+                if (mqtt_client) {
+                    esp_mqtt_client_stop(mqtt_client);
+                    esp_mqtt_client_destroy(mqtt_client);
+                    mqtt_client = NULL;
+                }
+                mqtt_init();
+            }
+
             // Publish data (WiFi/MQTT already connected)
             publish_linky_data(&linky_data);
         }
-
-        // Enter light sleep (WiFi stays connected)
-        enter_sleep();
     }
 
 #else
