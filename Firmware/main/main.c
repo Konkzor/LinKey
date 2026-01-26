@@ -11,12 +11,25 @@
 #include "esp_pm.h"
 #include "nvs_flash.h"
 #include "mqtt_client.h"
+#include "driver/gpio.h"
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
 
 #include "hulp.h"
 #include "ulp_linky.h"
 #include "debug.h"
 
 static const char *TAG = "LINKY_MAIN";
+
+// RGB LED pin definitions
+#define RGB_LED_RED_PIN     GPIO_NUM_13
+#define RGB_LED_GREEN_PIN   GPIO_NUM_15
+#define RGB_LED_BLUE_PIN    GPIO_NUM_2
+
+// Supercap voltage ADC configuration (GPIO 33 = ADC1_CHANNEL_5)
+#define SUPERCAP_ADC_CHANNEL    ADC1_CHANNEL_5
+#define SUPERCAP_ADC_ATTEN      ADC_ATTEN_DB_12  // Full scale ~3.3V
+#define SUPERCAP_ADC_WIDTH      ADC_WIDTH_BIT_12
 
 // Sleep mode configuration
 #ifdef CONFIG_LINKY_SLEEP_MODE_LIGHT
@@ -54,6 +67,60 @@ RTC_DATA_ATTR static bool rtc_bssid_valid = false;
 // Light sleep: Track initialization state
 RTC_DATA_ATTR static bool wifi_mqtt_initialized = false;
 #endif
+
+// ADC calibration characteristics for supercap voltage reading
+static esp_adc_cal_characteristics_t *adc_chars = NULL;
+
+static void supercap_adc_init(void)
+{
+    // Configure ADC width (shared for all ADC1 channels - HULP may have set this already)
+    adc1_config_width(SUPERCAP_ADC_WIDTH);
+
+    // Configure channel attenuation
+    adc1_config_channel_atten(SUPERCAP_ADC_CHANNEL, SUPERCAP_ADC_ATTEN);
+
+    // Initialize calibration
+    adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    esp_adc_cal_value_t cal_type = esp_adc_cal_characterize(
+        ADC_UNIT_1, SUPERCAP_ADC_ATTEN, SUPERCAP_ADC_WIDTH, 1100, adc_chars);
+
+    if (cal_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
+        DEBUG_LOG(TAG, "ADC calibration: Two Point");
+    } else if (cal_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
+        DEBUG_LOG(TAG, "ADC calibration: eFuse Vref");
+    } else {
+        DEBUG_LOG(TAG, "ADC calibration: Default");
+    }
+
+    DEBUG_LOG(TAG, "Supercap ADC initialized (GPIO 33, ADC1_CH5)");
+}
+
+// Read supercap voltage in millivolts
+int supercap_read_voltage_mv(void)
+{
+    int raw_value = adc1_get_raw(SUPERCAP_ADC_CHANNEL);
+    uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(raw_value, adc_chars);
+    return (int)voltage_mv;
+}
+
+static void rgb_led_init(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << RGB_LED_RED_PIN) | (1ULL << RGB_LED_GREEN_PIN) | (1ULL << RGB_LED_BLUE_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+
+    // Turn off all LEDs initially (assuming active-high LEDs)
+    gpio_set_level(RGB_LED_RED_PIN, 0);
+    gpio_set_level(RGB_LED_GREEN_PIN, 0);
+    gpio_set_level(RGB_LED_BLUE_PIN, 0);
+
+    DEBUG_LOG(TAG, "RGB LEDs initialized (R:%d, G:%d, B:%d)", RGB_LED_RED_PIN, RGB_LED_GREEN_PIN, RGB_LED_BLUE_PIN);
+}
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -302,6 +369,12 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    // Initialize RGB LEDs
+    rgb_led_init();
+
+    // Initialize supercap voltage ADC
+    supercap_adc_init();
 
 #if USE_LIGHT_SLEEP
     // Light sleep mode: Initialize once and loop forever
