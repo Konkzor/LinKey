@@ -9,7 +9,7 @@ extern "C" {
 #endif
 
 // Linky TIC configuration
-#define LINKY_RX_GPIO       GPIO_NUM_36
+#define LINKY_RX_GPIO       GPIO_NUM_14
 #define LINKY_BAUD_RATE     1200
 #define LINKY_MAX_MSG_LEN   32 
 
