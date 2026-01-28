@@ -22,6 +22,7 @@ typedef struct {
     uint16_t iinst;         // Instantaneous current (A)
     uint32_t base;          // Energy index (Wh)
     uint16_t valid_flags;   // Bit flags: bit0=iinst, bit1=base
+    uint32_t voltage_cap;   // Super cap voltage (mV)
 } linky_data_t;
 
 // RTC data shared between ULP and main CPU

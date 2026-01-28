@@ -31,13 +31,6 @@ static const char *TAG = "LINKY_MAIN";
 #define SUPERCAP_ADC_ATTEN      ADC_ATTEN_DB_12  // Full scale ~3.3V
 #define SUPERCAP_ADC_WIDTH      ADC_WIDTH_BIT_12
 
-// Sleep mode configuration
-#ifdef CONFIG_LINKY_SLEEP_MODE_LIGHT
-    #define USE_LIGHT_SLEEP 1
-#else
-    #define USE_LIGHT_SLEEP 0
-#endif
-
 // WiFi and MQTT credentials from Kconfig
 #define WIFI_SSID       CONFIG_LINKY_WIFI_SSID
 #define WIFI_PASS       CONFIG_LINKY_WIFI_PASSWORD
@@ -48,6 +41,7 @@ static const char *TAG = "LINKY_MAIN";
 // MQTT topics
 #define MQTT_TOPIC_IINST CONFIG_LINKY_MQTT_TOPIC_PREFIX "/iinst"
 #define MQTT_TOPIC_BASE  CONFIG_LINKY_MQTT_TOPIC_PREFIX "/base"
+#define MQTT_TOPIC_VCAP  CONFIG_LINKY_MQTT_TOPIC_PREFIX "/vcap"
 
 // Event group for WiFi connection
 static EventGroupHandle_t s_wifi_event_group;
@@ -62,11 +56,6 @@ static bool mqtt_connected = false;
 RTC_DATA_ATTR static uint8_t rtc_bssid[6] = {0};
 RTC_DATA_ATTR static uint8_t rtc_channel = 0;
 RTC_DATA_ATTR static bool rtc_bssid_valid = false;
-
-#if USE_LIGHT_SLEEP
-// Light sleep: Track initialization state
-RTC_DATA_ATTR static bool wifi_mqtt_initialized = false;
-#endif
 
 // ADC calibration characteristics for supercap voltage reading
 static esp_adc_cal_characteristics_t *adc_chars = NULL;
@@ -128,9 +117,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-#ifdef USE_LIGHT_SLEEP
         esp_wifi_connect(); // FIXME: not sure it is called if disconnection happens during light sleep
-#endif
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         DEBUG_LOG(TAG, "WiFi connected - IP: " IPSTR, IP2STR(&event->ip_info.ip));
@@ -151,8 +138,6 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                int32_t event_id, void *event_data)
 {
-    esp_mqtt_event_handle_t event = event_data;
-
     switch ((esp_mqtt_event_id_t)event_id) {
         case MQTT_EVENT_CONNECTED:
             DEBUG_LOG(TAG, "MQTT connected");
@@ -173,7 +158,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
 
 static void wifi_init_sta(void)
 {
-
     s_wifi_event_group = xEventGroupCreate();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -188,6 +172,8 @@ static void wifi_init_sta(void)
     ip_info.netmask.addr = esp_ip4addr_aton(CONFIG_LINKY_STATIC_NETMASK);
     esp_netif_set_ip_info(netif, &ip_info);
     DEBUG_LOG(TAG, "Static IP: %s", CONFIG_LINKY_STATIC_IP);
+#else
+    (void)netif; // Suppress unused variable warning
 #endif
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -206,7 +192,6 @@ static void wifi_init_sta(void)
                                                         &wifi_event_handler,
                                                         NULL,
                                                         &instance_got_ip));
-
 
     wifi_config_t wifi_config = {
         .sta = {
@@ -230,10 +215,8 @@ static void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
 
-#if USE_LIGHT_SLEEP
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
     DEBUG_LOG(TAG, "WiFi modem sleep enabled");
-#endif
 
     // Start WiFi
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -307,12 +290,16 @@ static void publish_linky_data(linky_data_t *data)
     else{
         DEBUG_LOG(TAG, "BASE not valid, skipping publish");
     }
+
+    // Publish VCAP
+    snprintf(payload, sizeof(payload), "%lu", data->voltage_cap);
+    esp_mqtt_client_publish(mqtt_client, MQTT_TOPIC_VCAP, payload, 0, 0, 0);
+    DEBUG_LOG(TAG, "Published: VCAP=%lu", data->voltage_cap);
 }
 
-// Enter sleep mode (deep or light based on configuration)
+// Enter light sleep mode
 static void enter_sleep(void)
 {
-#if USE_LIGHT_SLEEP
     // Light sleep mode - use automatic sleep via vTaskDelay
     // The esp_pm_configure() with light_sleep_enable=true will
     // automatically enter light sleep during idle periods
@@ -323,44 +310,11 @@ static void enter_sleep(void)
     vTaskDelay(pdMS_TO_TICKS(1000));  // 1 second delay, will auto-sleep
 
     DEBUG_LOG(TAG, "Delay expired, checking for data");
-#else
-    // Deep sleep mode - disconnect everything
-    DEBUG_LOG(TAG, "Entering deep sleep - ULP will wake us up");
-
-    // Disconnect WiFi and MQTT to save power
-    if (mqtt_client) {
-        esp_mqtt_client_stop(mqtt_client);
-        esp_mqtt_client_destroy(mqtt_client);
-        mqtt_client = NULL;
-    }
-    esp_wifi_stop();
-
-    // Enable ULP wakeup
-    ESP_ERROR_CHECK(esp_sleep_enable_ulp_wakeup());
-
-    // Enter deep sleep
-    esp_deep_sleep_start();
-#endif
 }
 
 void app_main(void)
 {
     linky_data_t linky_data;
-
-    // Print wake-up reason
-    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    switch (wakeup_reason) {
-        case ESP_SLEEP_WAKEUP_ULP:
-            DEBUG_LOG(TAG, "Wake-up from ULP");
-            break;
-        case ESP_SLEEP_WAKEUP_TIMER:
-            DEBUG_LOG(TAG, "Wake-up from timer");
-            break;
-        case ESP_SLEEP_WAKEUP_UNDEFINED:
-        default:
-            DEBUG_LOG(TAG, "Initial boot");
-            break;
-    }
 
     // Initialize NVS (used for Wifi)
     esp_err_t ret = nvs_flash_init();
@@ -376,10 +330,6 @@ void app_main(void)
     // Initialize supercap voltage ADC
     supercap_adc_init();
 
-#if USE_LIGHT_SLEEP
-    // Light sleep mode: Initialize once and loop forever
-    DEBUG_LOG(TAG, "First boot - initializing WiFi/MQTT/ULP");
-
     // Configure automatic power management for light sleep
     esp_pm_config_t pm_config = {
         .max_freq_mhz = 160,      // Max CPU frequency
@@ -389,10 +339,37 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
     DEBUG_LOG(TAG, "Power management configured: auto light sleep enabled");
 
+    // Wait for voltage to be above 2.5V
+    linky_data.voltage_cap = 0;
+    while(linky_data.voltage_cap <= 2500) {
+        linky_data.voltage_cap = supercap_read_voltage_mv();
+        DEBUG_LOG(TAG, "Supercap voltage: %lu mV", linky_data.voltage_cap);
+
+        if(linky_data.voltage_cap < 2000 ) {
+            gpio_set_level(RGB_LED_RED_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            gpio_set_level(RGB_LED_RED_PIN, 0);
+        }
+        else {
+            gpio_set_level(RGB_LED_RED_PIN, 1);
+            gpio_set_level(RGB_LED_GREEN_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            gpio_set_level(RGB_LED_RED_PIN, 0);
+            gpio_set_level(RGB_LED_GREEN_PIN, 0);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    gpio_set_level(RGB_LED_GREEN_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+    gpio_set_level(RGB_LED_GREEN_PIN, 0);
+
+    DEBUG_LOG(TAG, "Super cap charged enough - initializing WiFi/MQTT/ULP");
+
     // Connect to WiFi (with fast scan and power save)
     wifi_init_sta();
 
-    // Initialize MQTT once
+    // Initialize MQTT
     mqtt_init();
 
     // Initialize ULP
@@ -401,11 +378,31 @@ void app_main(void)
 
     DEBUG_LOG(TAG, "Initialization complete");
 
-    // Light sleep: Loop forever, waking up from ULP
+    // Main loop: waking up from light sleep
     while (1) {
         // Enter light sleep (WiFi stays connected)
         enter_sleep();
-        
+
+        // Notify current voltage value
+        linky_data.voltage_cap = supercap_read_voltage_mv();
+        if(linky_data.voltage_cap < 1000 ) {
+            gpio_set_level(RGB_LED_RED_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            gpio_set_level(RGB_LED_RED_PIN, 0);
+        }
+        else if(linky_data.voltage_cap < 2000 ) {
+            gpio_set_level(RGB_LED_RED_PIN, 1);
+            gpio_set_level(RGB_LED_GREEN_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            gpio_set_level(RGB_LED_RED_PIN, 0);
+            gpio_set_level(RGB_LED_GREEN_PIN, 0);
+        }
+        else{
+            gpio_set_level(RGB_LED_GREEN_PIN, 1);
+            vTaskDelay(pdMS_TO_TICKS(10));
+            gpio_set_level(RGB_LED_GREEN_PIN, 0);
+        }
+
         // Get data from ULP
         get_linky_data(&linky_data);
 
@@ -417,7 +414,6 @@ void app_main(void)
             EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
             if (!(bits & WIFI_CONNECTED_BIT)) {
                 DEBUG_LOG(TAG, "WiFi disconnected, reconnecting...");
-                // Don't call wifi_init_sta() - just reconnect!
                 xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
                 esp_wifi_connect();
 
@@ -432,10 +428,10 @@ void app_main(void)
                     ESP_LOGW(TAG, "WiFi reconnect failed");
                 }
             }
+
             // Monitor MQTT connection
             if (!mqtt_connected) {
                 DEBUG_LOG(TAG, "MQTT disconnected, reconnecting...");
-                // Stop and destroy old client first to avoid leak
                 if (mqtt_client) {
                     esp_mqtt_client_stop(mqtt_client);
                     esp_mqtt_client_destroy(mqtt_client);
@@ -444,42 +440,8 @@ void app_main(void)
                 mqtt_init();
             }
 
-            // Publish data (WiFi/MQTT already connected)
+            // Publish data
             publish_linky_data(&linky_data);
         }
     }
-
-#else
-    // Deep sleep mode: Original behavior
-
-    // Initialize ULP (only on first boot)
-    if (wakeup_reason != ESP_SLEEP_WAKEUP_ULP && wakeup_reason != ESP_SLEEP_WAKEUP_TIMER) {
-        init_ulp_linky();
-        DEBUG_LOG(TAG, "ULP initialized, entering deep sleep for ULP to collect data");
-        vTaskDelay(pdMS_TO_TICKS(1000)); // Give ULP time to start
-        enter_sleep();
-        return; // Never reached
-    }
-
-    // Woke up from ULP - get data
-    get_linky_data(&linky_data);
-
-    if (linky_data.valid_flags != 0) {
-        DEBUG_LOG(TAG, "Linky data - IINST: %u A, BASE: %lu Wh",
-                linky_data.iinst, linky_data.base);
-
-        // Connect to WiFi
-        wifi_init_sta();
-
-        // Connect to MQTT
-        mqtt_init();
-
-        // Publish data
-        publish_linky_data(&linky_data);
-    }
-
-    // Go back to deep sleep
-    enter_sleep();
-    // Never reached
-#endif
 }

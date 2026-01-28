@@ -35,44 +35,20 @@ menu "Linky Monitor Configuration"
         string "MQTT Topic Prefix"
         default "linky"
         help
-            Prefix for MQTT topics. Topics will be: <prefix>/iinst, <prefix>/base
+            Prefix for MQTT topics. Topics will be: <prefix>/iinst, <prefix>/base, <prefix>/vcap
 
     config LINKY_RX_GPIO
         int "Linky RX GPIO"
-        default 36
+        default 14
         help
             GPIO number for Linky TIC serial input (RX).
             Must be an RTC-capable GPIO: 0, 2, 4, 12-15, 25-27, 32-39
 
-    choice LINKY_SLEEP_MODE
-        prompt "Sleep Mode"
-        default LINKY_SLEEP_MODE_DEEP
-        help
-            Select sleep mode for power/speed tradeoff.
-            Deep Sleep: Ultra-low power (~1mA), slower wake-up (2-5s)
-            Light Sleep: Higher power (~30mA), very fast wake-up (200-500ms)
-
-        config LINKY_SLEEP_MODE_DEEP
-            bool "Deep Sleep (Ultra Low Power)"
-            help
-                Use deep sleep mode. WiFi/MQTT reconnect on every wake-up.
-                Power: ~1mA average, Wake-up time: 2-5 seconds
-
-        config LINKY_SLEEP_MODE_LIGHT
-            bool "Light Sleep (Fast Wake-up)"
-            help
-                Use light sleep with WiFi modem sleep. WiFi/MQTT stay connected.
-                Power: ~20-50mA average, Wake-up time: 200-500ms
-
-    endchoice
-
     config LINKY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"
         default n
-        depends on LINKY_SLEEP_MODE_LIGHT
         help
-            Use static IP instead of DHCP for even faster connection.
-            Only recommended with Light Sleep mode.
+            Use static IP instead of DHCP for faster initial connection.
 
     config LINKY_STATIC_IP
         string "Static IP Address"
