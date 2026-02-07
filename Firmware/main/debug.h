@@ -3,11 +3,15 @@
 
 #include "esp_log.h"
 
-// Debug logging macro - controlled by Kconfig
+// Debug logging macros - controlled by Kconfig
 #ifdef CONFIG_LINKY_DEBUG_LOGS
-    #define DEBUG_LOG(tag, format, ...) ESP_LOGI(tag, format, ##__VA_ARGS__)
+    #define DEBUG_LOG(tag, format, ...)  ESP_LOGI(tag, format, ##__VA_ARGS__)
+    #define DEBUG_LOGW(tag, format, ...) ESP_LOGW(tag, format, ##__VA_ARGS__)
+    #define DEBUG_LOGE(tag, format, ...) ESP_LOGE(tag, format, ##__VA_ARGS__)
 #else
-    #define DEBUG_LOG(tag, format, ...) do {} while(0)
+    #define DEBUG_LOG(tag, format, ...)  do {} while(0)
+    #define DEBUG_LOGW(tag, format, ...) do {} while(0)
+    #define DEBUG_LOGE(tag, format, ...) do {} while(0)
 #endif
 
 #endif // DEBUG_H

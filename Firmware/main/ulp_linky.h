@@ -17,6 +17,10 @@ extern "C" {
 #define LABEL_IINST         "IINST"
 #define LABEL_BASE          "BASE"
 
+// Valid flags for linky_data_t
+#define LINKY_FLAG_IINST    0x01
+#define LINKY_FLAG_BASE     0x02
+
 // Structure to hold decoded Linky data
 typedef struct {
     uint16_t iinst;         // Instantaneous current (A)

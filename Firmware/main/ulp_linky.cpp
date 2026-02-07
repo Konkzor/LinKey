@@ -1,8 +1,6 @@
 #include <string.h>
 #include <ctype.h>
 #include "esp_log.h"
-#include "driver/rtc_io.h"
-#include "soc/rtc.h"
 
 extern "C" {
 #include "hulp.h"
@@ -130,7 +128,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 
     // Validate checksum first
     if (!validate_checksum(msg, len)) {
-        ESP_LOGW(TAG, "Invalid checksum");
+        DEBUG_LOGW(TAG, "Invalid checksum");
         return;
     }
 
@@ -147,7 +145,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
         if(len_parsed == 3){
             DEBUG_LOG(TAG, "IINST: %d A", data->iinst);
             data->iinst = iinst_temp;
-            data->valid_flags |= 0x01;
+            data->valid_flags |= LINKY_FLAG_IINST;
         }
     }
     else if (str_starts_with(msg, LABEL_BASE)) {
@@ -157,7 +155,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
         if(len_parsed == 9){  
             DEBUG_LOG(TAG, "BASE: %lu Wh", data->base );
             data->base = base_temp;
-            data->valid_flags |= 0x02;
+            data->valid_flags |= LINKY_FLAG_BASE;
         }
     }
 }
