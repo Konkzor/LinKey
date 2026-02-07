@@ -1,3 +1,11 @@
+/**
+ * @file ulp_linky.h
+ * @brief ULP-based Linky TIC protocol decoder
+ *
+ * Implements 7E1 UART reception on the ULP coprocessor for low-power
+ * monitoring of French Linky smart meter TIC (Teleinformation Client) data.
+ */
+
 #ifndef ULP_LINKY_H
 #define ULP_LINKY_H
 
@@ -8,28 +16,42 @@
 extern "C" {
 #endif
 
-// Linky TIC configuration
-#define LINKY_RX_GPIO       GPIO_NUM_14
-#define LINKY_BAUD_RATE     1200
-#define LINKY_MAX_MSG_LEN   32 
+/** @name Linky TIC Configuration
+ * @{
+ */
+#define LINKY_RX_GPIO       GPIO_NUM_14  /**< GPIO for TIC serial input */
+#define LINKY_BAUD_RATE     1200         /**< TIC baud rate (1200 bps) */
+#define LINKY_MAX_MSG_LEN   32           /**< Maximum message length */
+/** @} */
 
-// Message labels we're interested in
-#define LABEL_IINST         "IINST"
-#define LABEL_BASE          "BASE"
+/** @name TIC Message Labels
+ * @{
+ */
+#define LABEL_IINST         "IINST"      /**< Instantaneous current label */
+#define LABEL_BASE          "BASE"       /**< Base energy index label */
+/** @} */
 
-// Valid flags for linky_data_t
-#define LINKY_FLAG_IINST    0x01
-#define LINKY_FLAG_BASE     0x02
+/** @name Valid Flags for linky_data_t
+ * @{
+ */
+#define LINKY_FLAG_IINST    0x01         /**< IINST value is valid */
+#define LINKY_FLAG_BASE     0x02         /**< BASE value is valid */
+/** @} */
 
-// Structure to hold decoded Linky data
+/**
+ * @brief Decoded Linky TIC data
+ */
 typedef struct {
-    uint16_t iinst;         // Instantaneous current (A)
-    uint32_t base;          // Energy index (Wh)
-    uint16_t valid_flags;   // Bit flags: bit0=iinst, bit1=base
-    uint32_t voltage_cap;   // Super cap voltage (mV)
+    uint16_t iinst;        /**< Instantaneous current (A) */
+    uint32_t base;         /**< Energy index (Wh) */
+    uint16_t valid_flags;  /**< Validity flags (LINKY_FLAG_*) */
+    uint32_t voltage_cap;  /**< Supercap voltage (mV), filled by caller */
 } linky_data_t;
 
-// RTC data shared between ULP and main CPU
+/** @name ULP RTC Buffers
+ * @brief Ring buffers in RTC slow memory shared between ULP and main CPU
+ * @{
+ */
 extern ulp_var_t ulp_rx_buffer[];
 extern ulp_var_t ulp_rx_line1[];
 extern ulp_var_t ulp_rx_line2[];
@@ -41,11 +63,25 @@ extern ulp_var_t ulp_rx_line7[];
 extern ulp_var_t ulp_rx_line8[];
 extern ulp_var_t ulp_rx_line9[];
 extern ulp_var_t ulp_rx_line10[];
+/** @} */
 
-// Function to initialize and start ULP
+/**
+ * @brief Initialize and start ULP Linky decoder
+ *
+ * Loads ULP program implementing 7E1 UART RX at 1200 baud.
+ * ULP continuously receives TIC frames into 10 ring buffers.
+ * Main CPU polls buffers periodically via get_linky_data().
+ */
 void init_ulp_linky(void);
 
-// Function to get data from ULP
+/**
+ * @brief Get decoded data from ULP buffers
+ *
+ * Reads all 10 line buffers, validates checksums, and parses
+ * IINST/BASE values. Sets valid_flags for successfully decoded fields.
+ *
+ * @param[out] data Structure to fill with decoded values (zeroed first)
+ */
 void get_linky_data(linky_data_t *data);
 
 #ifdef __cplusplus

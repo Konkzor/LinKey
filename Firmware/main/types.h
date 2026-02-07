@@ -1,3 +1,8 @@
+/**
+ * @file types.h
+ * @brief Shared types for WiFi and MQTT managers
+ */
+
 #ifndef TYPES_H
 #define TYPES_H
 
@@ -8,14 +13,20 @@
 extern "C" {
 #endif
 
-// Connection result (used by wifi and mqtt managers)
+/**
+ * @brief Connection result codes
+ */
 typedef enum {
-    CONN_OK,
-    CONN_FAILED,
-    CONN_VOLTAGE_LOW
+    CONN_OK,           /**< Connection successful */
+    CONN_FAILED,       /**< Connection failed (timeout or error) */
+    CONN_VOLTAGE_LOW   /**< Connection aborted due to low voltage */
 } conn_result_t;
 
-// Voltage check callback type (returns true if voltage is low)
+/**
+ * @brief Voltage check callback type
+ * @param threshold Voltage threshold in millivolts
+ * @return true if voltage is below threshold (low condition)
+ */
 typedef bool (*voltage_check_fn_t)(uint16_t threshold);
 
 #ifdef __cplusplus
