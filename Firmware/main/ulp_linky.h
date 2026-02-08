@@ -46,6 +46,7 @@ typedef struct {
     uint32_t base;         /**< Energy index (Wh) */
     uint16_t valid_flags;  /**< Validity flags (LINKY_FLAG_*) */
     uint32_t voltage_cap;  /**< Supercap voltage (mV), filled by caller */
+    uint32_t uptime_s;     /**< Device uptime (seconds), filled by caller */
 } linky_data_t;
 
 /** @name ULP RTC Buffers

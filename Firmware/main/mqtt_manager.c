@@ -41,27 +41,50 @@ static const char* get_device_mac_str(void)
 }
 
 // Publish Home Assistant discovery config for a sensor
+// state_class: "measurement", "total", or "total_increasing" (NULL to omit)
+// icon: MDI icon like "mdi:flash" (NULL to use default)
 static void publish_ha_sensor_config(esp_mqtt_client_handle_t client, const char *mac,
                                      const char *sensor_id, const char *name,
                                      const char *device_class, const char *unit,
+                                     const char *state_class, const char *icon,
                                      const char *value_template)
 {
     char topic[128];
-    char payload[512];
+    char payload[600];
+    int offset = 0;
 
     // Discovery topic: homeassistant/sensor/linkey_<mac>/<sensor>/config
     snprintf(topic, sizeof(topic), "%s/sensor/linkey_%s/%s/config",
              HA_DISCOVERY_PREFIX, mac, sensor_id);
 
     // Build JSON payload
-    snprintf(payload, sizeof(payload),
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
         "{"
         "\"name\":\"%s\","
         "\"unique_id\":\"linkey_%s_%s\","
         "\"state_topic\":\"%s\","
         "\"availability_topic\":\"%s\","
         "\"device_class\":\"%s\","
-        "\"unit_of_measurement\":\"%s\","
+        "\"unit_of_measurement\":\"%s\",",
+        name, mac, sensor_id,
+        MQTT_TOPIC_STATE,
+        MQTT_TOPIC_STATUS,
+        device_class, unit);
+
+    // Add optional state_class
+    if (state_class) {
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+            "\"state_class\":\"%s\",", state_class);
+    }
+
+    // Add optional icon
+    if (icon) {
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+            "\"icon\":\"%s\",", icon);
+    }
+
+    // Add value_template and device info
+    snprintf(payload + offset, sizeof(payload) - offset,
         "\"value_template\":\"%s\","
         "\"device\":{"
             "\"identifiers\":[\"linkey_%s\"],"
@@ -70,10 +93,7 @@ static void publish_ha_sensor_config(esp_mqtt_client_handle_t client, const char
             "\"manufacturer\":\"%s\""
         "}"
         "}",
-        name, mac, sensor_id,
-        MQTT_TOPIC_STATE,
-        MQTT_TOPIC_STATUS,
-        device_class, unit, value_template,
+        value_template,
         mac, DEVICE_NAME, DEVICE_MODEL, DEVICE_MANUFACTURER);
 
     // Publish with retain flag so HA remembers the config
@@ -86,17 +106,29 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 {
     const char *mac = get_device_mac_str();
 
-    // IINST sensor (current)
+    // IINST sensor (current) - instantaneous measurement
     publish_ha_sensor_config(client, mac, "iinst", "Current",
-                             "current", "A", "{{ value_json.iinst }}");
+                             "current", "A",
+                             "measurement", "mdi:current-ac",
+                             "{{ value_json.iinst }}");
 
-    // BASE sensor (energy)
+    // BASE sensor (energy) - cumulative meter, only increases
     publish_ha_sensor_config(client, mac, "base", "Energy Index",
-                             "energy", "Wh", "{{ value_json.base }}");
+                             "energy", "Wh",
+                             "total_increasing", "mdi:counter",
+                             "{{ value_json.base }}");
 
-    // VCAP sensor (voltage)
+    // VCAP sensor (voltage) - instantaneous measurement
     publish_ha_sensor_config(client, mac, "vcap", "Supercap Voltage",
-                             "voltage", "mV", "{{ value_json.vcap }}");
+                             "voltage", "mV",
+                             "measurement", "mdi:battery-heart-variant",
+                             "{{ value_json.vcap }}");
+
+    // Uptime sensor (duration) - total increasing
+    publish_ha_sensor_config(client, mac, "uptime", "Uptime",
+                             "duration", "s",
+                             "total_increasing", "mdi:timer-outline",
+                             "{{ value_json.uptime }}");
 }
 
 // Publish online status to availability topic
@@ -277,6 +309,10 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
     if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
     offset += snprintf(payload + offset, sizeof(payload) - offset,
                       "\"vcap\":%lu", data->voltage_cap);
+
+    // Uptime is always included
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+                      ",\"uptime\":%lu", data->uptime_s);
 
     snprintf(payload + offset, sizeof(payload) - offset, "}");
 

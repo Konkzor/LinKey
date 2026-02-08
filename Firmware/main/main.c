@@ -11,6 +11,7 @@
 #include "driver/gpio.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
+#include "esp_timer.h"
 #include "ulp_linky.h"
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
@@ -430,6 +431,7 @@ static app_state_t handle_state_publish_data(void)
     // Get data from ULP
     get_linky_data(&linky_data);
     linky_data.voltage_cap = supercap_read_voltage_mv();
+    linky_data.uptime_s = (uint32_t)(esp_timer_get_time() / 1000000);
 
     // Check if data received
     if (linky_data.valid_flags == 0) {
