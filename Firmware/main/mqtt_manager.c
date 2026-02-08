@@ -1,7 +1,9 @@
 #include <string.h>
+#include <stdio.h>
 #include "mqtt_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_mac.h"
 #include "debug.h"
 
 static const char *TAG = "MQTT_MGR";
@@ -12,9 +14,97 @@ static const char *TAG = "MQTT_MGR";
 #define MQTT_PASSWORD   CONFIG_LINKY_MQTT_PASSWORD
 
 // MQTT topics
-#define MQTT_TOPIC_IINST CONFIG_LINKY_MQTT_TOPIC_PREFIX "/iinst"
-#define MQTT_TOPIC_BASE  CONFIG_LINKY_MQTT_TOPIC_PREFIX "/base"
-#define MQTT_TOPIC_VCAP  CONFIG_LINKY_MQTT_TOPIC_PREFIX "/vcap"
+#define MQTT_TOPIC_STATE  CONFIG_LINKY_MQTT_TOPIC_PREFIX "/state"
+#define MQTT_TOPIC_STATUS CONFIG_LINKY_MQTT_TOPIC_PREFIX "/status"
+
+// Home Assistant discovery prefix
+#define HA_DISCOVERY_PREFIX "homeassistant"
+
+// Device info for Home Assistant
+#define DEVICE_NAME         "Linkey"
+#define DEVICE_MODEL        "Linkey"
+#define DEVICE_MANUFACTURER "Konkzor"
+
+// Cached MAC address string
+static char device_mac_str[13] = {0};  // 12 hex chars + null
+
+// Get device MAC address as lowercase hex string
+static const char* get_device_mac_str(void)
+{
+    if (device_mac_str[0] == 0) {
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_STA);
+        snprintf(device_mac_str, sizeof(device_mac_str), "%02x%02x%02x%02x%02x%02x",
+                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+    return device_mac_str;
+}
+
+// Publish Home Assistant discovery config for a sensor
+static void publish_ha_sensor_config(esp_mqtt_client_handle_t client, const char *mac,
+                                     const char *sensor_id, const char *name,
+                                     const char *device_class, const char *unit,
+                                     const char *value_template)
+{
+    char topic[128];
+    char payload[512];
+
+    // Discovery topic: homeassistant/sensor/linkey_<mac>/<sensor>/config
+    snprintf(topic, sizeof(topic), "%s/sensor/linkey_%s/%s/config",
+             HA_DISCOVERY_PREFIX, mac, sensor_id);
+
+    // Build JSON payload
+    snprintf(payload, sizeof(payload),
+        "{"
+        "\"name\":\"%s\","
+        "\"unique_id\":\"linkey_%s_%s\","
+        "\"state_topic\":\"%s\","
+        "\"availability_topic\":\"%s\","
+        "\"device_class\":\"%s\","
+        "\"unit_of_measurement\":\"%s\","
+        "\"value_template\":\"%s\","
+        "\"device\":{"
+            "\"identifiers\":[\"linkey_%s\"],"
+            "\"name\":\"%s\","
+            "\"model\":\"%s\","
+            "\"manufacturer\":\"%s\""
+        "}"
+        "}",
+        name, mac, sensor_id,
+        MQTT_TOPIC_STATE,
+        MQTT_TOPIC_STATUS,
+        device_class, unit, value_template,
+        mac, DEVICE_NAME, DEVICE_MODEL, DEVICE_MANUFACTURER);
+
+    // Publish with retain flag so HA remembers the config
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+    DEBUG_LOG(TAG, "Published HA discovery: %s", sensor_id);
+}
+
+// Publish all Home Assistant discovery configs
+static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
+{
+    const char *mac = get_device_mac_str();
+
+    // IINST sensor (current)
+    publish_ha_sensor_config(client, mac, "iinst", "Current",
+                             "current", "A", "{{ value_json.iinst }}");
+
+    // BASE sensor (energy)
+    publish_ha_sensor_config(client, mac, "base", "Energy Index",
+                             "energy", "Wh", "{{ value_json.base }}");
+
+    // VCAP sensor (voltage)
+    publish_ha_sensor_config(client, mac, "vcap", "Supercap Voltage",
+                             "voltage", "mV", "{{ value_json.vcap }}");
+}
+
+// Publish online status to availability topic
+static void mqtt_publish_online(esp_mqtt_client_handle_t client)
+{
+    esp_mqtt_client_publish(client, MQTT_TOPIC_STATUS, "online", 0, 1, 1);
+    DEBUG_LOG(TAG, "Published: online");
+}
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
                                int32_t event_id, void *event_data)
@@ -26,6 +116,9 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_CONNECTED:
             DEBUG_LOG(TAG, "MQTT connected");
             state->connected = true;
+            // Publish online status and HA discovery configs
+            mqtt_publish_online(state->client);
+            mqtt_publish_ha_discovery(state->client);
             break;
         case MQTT_EVENT_DISCONNECTED:
             DEBUG_LOG(TAG, "MQTT disconnected");
@@ -62,6 +155,13 @@ void mqtt_init(mqtt_state_t *state, wifi_stop_fn_t wifi_stop_cb)
         .broker.address.uri = MQTT_BROKER_URI,
         .session.keepalive = 5,  // Reduced from 30s for faster disconnect detection
         .session.disable_clean_session = 0,
+        .session.last_will = {
+            .topic = MQTT_TOPIC_STATUS,
+            .msg = "offline",
+            .msg_len = 7,
+            .qos = 1,
+            .retain = 1
+        },
         .network.timeout_ms = 1000,  // Reduced from 3000ms
         .network.refresh_connection_after_ms = 0,
         .buffer.size = 512,
@@ -151,39 +251,42 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
         return false;
     }
 
-    char payload[32];
-    int ret;
+    char payload[128];
+    int offset = 0;
+    bool first = true;
 
-    // Publish IINST (QoS 1 for ACK-based connection monitoring)
+    // Build JSON payload with only valid fields
+    offset += snprintf(payload + offset, sizeof(payload) - offset, "{");
+
+    // Add IINST if valid
     if (data->valid_flags & LINKY_FLAG_IINST) {
-        snprintf(payload, sizeof(payload), "%u", data->iinst);
-        ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_IINST, payload, 0, 1, 0);
-        if (ret < 0) {
-            DEBUG_LOGW(TAG, "Failed to publish IINST");
-            return false;
-        }
-        DEBUG_LOG(TAG, "Published: IINST=%u", data->iinst);
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"iinst\":%u", data->iinst);
+        first = false;
     }
 
-    // Publish BASE (QoS 1)
+    // Add BASE if valid
     if (data->valid_flags & LINKY_FLAG_BASE) {
-        snprintf(payload, sizeof(payload), "%lu", data->base);
-        ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_BASE, payload, 0, 1, 0);
-        if (ret < 0) {
-            DEBUG_LOGW(TAG, "Failed to publish BASE");
-            return false;
-        }
-        DEBUG_LOG(TAG, "Published: BASE=%lu", data->base);
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"base\":%lu", data->base);
+        first = false;
     }
 
-    // Publish VCAP (QoS 1)
-    snprintf(payload, sizeof(payload), "%lu", data->voltage_cap);
-    ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_VCAP, payload, 0, 1, 0);
+    // VCAP is always included
+    if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+                      "\"vcap\":%lu", data->voltage_cap);
+
+    snprintf(payload + offset, sizeof(payload) - offset, "}");
+
+    // Publish single JSON to state topic (QoS 1)
+    int ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_STATE, payload, 0, 1, 0);
     if (ret < 0) {
-        DEBUG_LOGW(TAG, "Failed to publish VCAP");
+        DEBUG_LOGW(TAG, "Failed to publish state");
         return false;
     }
-    DEBUG_LOG(TAG, "Published: VCAP=%lu", data->voltage_cap);
 
+    DEBUG_LOG(TAG, "Published: %s", payload);
     return true;
 }
