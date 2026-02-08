@@ -17,3 +17,6 @@ Firmware/.cache/
 
 # VS Code
 .vscode/
+
+# Claude
+Firmware/CLAUDE.md

@@ -13,8 +13,8 @@ RTC_DATA_ATTR static uint8_t rtc_channel = 0;
 RTC_DATA_ATTR static bool rtc_bssid_valid = false;
 
 // WiFi credentials from Kconfig
-#define WIFI_SSID       CONFIG_LINKY_WIFI_SSID
-#define WIFI_PASS       CONFIG_LINKY_WIFI_PASSWORD
+#define WIFI_SSID       CONFIG_LINKEY_WIFI_SSID
+#define WIFI_PASS       CONFIG_LINKEY_WIFI_PASSWORD
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
@@ -58,14 +58,14 @@ void wifi_init(wifi_state_t *state)
 
     esp_netif_t *netif = esp_netif_create_default_wifi_sta();
 
-#ifdef CONFIG_LINKY_USE_STATIC_IP
+#ifdef CONFIG_LINKEY_USE_STATIC_IP
     esp_netif_dhcpc_stop(netif);
     esp_netif_ip_info_t ip_info;
-    ip_info.ip.addr = esp_ip4addr_aton(CONFIG_LINKY_STATIC_IP);
-    ip_info.gw.addr = esp_ip4addr_aton(CONFIG_LINKY_STATIC_GATEWAY);
-    ip_info.netmask.addr = esp_ip4addr_aton(CONFIG_LINKY_STATIC_NETMASK);
+    ip_info.ip.addr = esp_ip4addr_aton(CONFIG_LINKEY_STATIC_IP);
+    ip_info.gw.addr = esp_ip4addr_aton(CONFIG_LINKEY_STATIC_GATEWAY);
+    ip_info.netmask.addr = esp_ip4addr_aton(CONFIG_LINKEY_STATIC_NETMASK);
     esp_netif_set_ip_info(netif, &ip_info);
-    DEBUG_LOG(TAG, "Static IP: %s", CONFIG_LINKY_STATIC_IP);
+    DEBUG_LOG(TAG, "Static IP: %s", CONFIG_LINKEY_STATIC_IP);
 #else
     (void)netif;
 #endif

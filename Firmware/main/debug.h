@@ -2,7 +2,7 @@
  * @file debug.h
  * @brief Conditional debug logging macros
  *
- * Controlled by CONFIG_LINKY_DEBUG_LOGS Kconfig option.
+ * Controlled by CONFIG_LINKEY_DEBUG_LOGS Kconfig option.
  * When disabled, macros compile to no-ops with zero overhead.
  */
 
@@ -11,7 +11,7 @@
 
 #include "esp_log.h"
 
-#ifdef CONFIG_LINKY_DEBUG_LOGS
+#ifdef CONFIG_LINKEY_DEBUG_LOGS
     #define DEBUG_LOG(tag, format, ...)  ESP_LOGI(tag, format, ##__VA_ARGS__)
     #define DEBUG_LOGW(tag, format, ...) ESP_LOGW(tag, format, ##__VA_ARGS__)
     #define DEBUG_LOGE(tag, format, ...) ESP_LOGE(tag, format, ##__VA_ARGS__)

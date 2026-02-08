@@ -258,7 +258,7 @@ void get_linky_data(linky_data_t *data)
         DEBUG_LOG(TAG, "Buffer length: %d", len);
 
         if (len > 0) {
-#ifdef CONFIG_LINKY_DEBUG_LOGS
+#ifdef CONFIG_LINKEY_DEBUG_LOGS
             // Dump raw hex
             ESP_LOG_BUFFER_HEX(TAG, msg_buffer, len);
 
