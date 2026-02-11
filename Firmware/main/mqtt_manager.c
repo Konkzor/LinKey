@@ -25,6 +25,18 @@ static const char *TAG = "MQTT_MGR";
 #define DEVICE_MODEL        "Linkey"
 #define DEVICE_MANUFACTURER "Konkzor"
 
+// Firmware and hardware versions (major.minor)
+#define FW_VERSION_MAJOR    1
+#define FW_VERSION_MINOR    0
+#define HW_VERSION_MAJOR    1
+#define HW_VERSION_MINOR    0
+
+// Stringify helper
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+#define FW_VERSION STR(FW_VERSION_MAJOR) "." STR(FW_VERSION_MINOR)
+#define HW_VERSION STR(HW_VERSION_MAJOR) "." STR(HW_VERSION_MINOR)
+
 // Cached MAC address string
 static char device_mac_str[13] = {0};  // 12 hex chars + null
 
@@ -40,95 +52,108 @@ static const char* get_device_mac_str(void)
     return device_mac_str;
 }
 
-// Publish Home Assistant discovery config for a sensor
-// state_class: "measurement", "total", or "total_increasing" (NULL to omit)
-// icon: MDI icon like "mdi:flash" (NULL to use default)
-static void publish_ha_sensor_config(esp_mqtt_client_handle_t client, const char *mac,
-                                     const char *sensor_id, const char *name,
-                                     const char *device_class, const char *unit,
-                                     const char *state_class, const char *icon,
-                                     const char *value_template)
-{
-    char topic[128];
-    char payload[600];
-    int offset = 0;
-
-    // Discovery topic: homeassistant/sensor/linkey_<mac>/<sensor>/config
-    snprintf(topic, sizeof(topic), "%s/sensor/linkey_%s/%s/config",
-             HA_DISCOVERY_PREFIX, mac, sensor_id);
-
-    // Build JSON payload
-    offset += snprintf(payload + offset, sizeof(payload) - offset,
-        "{"
-        "\"name\":\"%s\","
-        "\"unique_id\":\"linkey_%s_%s\","
-        "\"state_topic\":\"%s\","
-        "\"availability_topic\":\"%s\","
-        "\"device_class\":\"%s\","
-        "\"unit_of_measurement\":\"%s\",",
-        name, mac, sensor_id,
-        MQTT_TOPIC_STATE,
-        MQTT_TOPIC_STATUS,
-        device_class, unit);
-
-    // Add optional state_class
-    if (state_class) {
-        offset += snprintf(payload + offset, sizeof(payload) - offset,
-            "\"state_class\":\"%s\",", state_class);
-    }
-
-    // Add optional icon
-    if (icon) {
-        offset += snprintf(payload + offset, sizeof(payload) - offset,
-            "\"icon\":\"%s\",", icon);
-    }
-
-    // Add value_template and device info
-    snprintf(payload + offset, sizeof(payload) - offset,
-        "\"value_template\":\"%s\","
-        "\"device\":{"
-            "\"identifiers\":[\"linkey_%s\"],"
-            "\"name\":\"%s\","
-            "\"model\":\"%s\","
-            "\"manufacturer\":\"%s\""
-        "}"
-        "}",
-        value_template,
-        mac, DEVICE_NAME, DEVICE_MODEL, DEVICE_MANUFACTURER);
-
-    // Publish with retain flag so HA remembers the config
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
-    DEBUG_LOG(TAG, "Published HA discovery: %s", sensor_id);
-}
-
-// Publish all Home Assistant discovery configs
+// Publish Home Assistant device discovery config (single payload for all sensors)
+// Topic: homeassistant/device/linkey_<mac>/config
 static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 {
     const char *mac = get_device_mac_str();
+    char topic[128];
+    char payload[1400];
+    int offset = 0;
 
-    // IINST sensor (current) - instantaneous measurement
-    publish_ha_sensor_config(client, mac, "iinst", "Current",
-                             "current", "A",
-                             "measurement", "mdi:current-ac",
-                             "{{ value_json.iinst }}");
+    // Device discovery topic
+    snprintf(topic, sizeof(topic), "%s/device/linkey_%s/config",
+             HA_DISCOVERY_PREFIX, mac);
+
+    // Build single JSON payload with device info, origin, and all components
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "{"
+        // Device info
+        "\"dev\":{"
+            "\"ids\":\"linkey_%s\","
+            "\"name\":\"%s\","
+            "\"mf\":\"%s\","
+            "\"mdl\":\"%s\","
+            "\"sw\":\"%s\","
+            "\"hw\":\"%s\","
+            "\"sn\":\"%s\""
+        "},",
+        mac, DEVICE_NAME, DEVICE_MANUFACTURER, DEVICE_MODEL,
+        FW_VERSION, HW_VERSION, mac);
+
+    // Origin info
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"o\":{\"name\":\"linkey\",\"sw\":\"%s\"},", FW_VERSION);
+
+    // Components
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"cmps\":{"
+
+        // IINST sensor (current) - instantaneous measurement
+        "\"iinst\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Current\","
+            "\"device_class\":\"current\","
+            "\"unit_of_measurement\":\"A\","
+            "\"state_class\":\"measurement\","
+            "\"icon\":\"mdi:current-ac\","
+            "\"value_template\":\"{{ value_json.iinst }}\","
+            "\"unique_id\":\"linkey_%s_iinst\""
+        "},",
+        mac);
 
     // BASE sensor (energy) - cumulative meter, only increases
-    publish_ha_sensor_config(client, mac, "base", "Energy Index",
-                             "energy", "Wh",
-                             "total_increasing", "mdi:counter",
-                             "{{ value_json.base }}");
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"base\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Energy Index\","
+            "\"device_class\":\"energy\","
+            "\"unit_of_measurement\":\"Wh\","
+            "\"state_class\":\"total_increasing\","
+            "\"icon\":\"mdi:counter\","
+            "\"value_template\":\"{{ value_json.base }}\","
+            "\"unique_id\":\"linkey_%s_base\""
+        "},",
+        mac);
 
     // VCAP sensor (voltage) - instantaneous measurement
-    publish_ha_sensor_config(client, mac, "vcap", "Supercap Voltage",
-                             "voltage", "mV",
-                             "measurement", "mdi:battery-heart-variant",
-                             "{{ value_json.vcap }}");
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"vcap\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Supercap Voltage\","
+            "\"device_class\":\"voltage\","
+            "\"unit_of_measurement\":\"mV\","
+            "\"state_class\":\"measurement\","
+            "\"icon\":\"mdi:battery-heart-variant\","
+            "\"value_template\":\"{{ value_json.vcap }}\","
+            "\"unique_id\":\"linkey_%s_vcap\""
+        "},",
+        mac);
 
     // Uptime sensor (duration) - total increasing
-    publish_ha_sensor_config(client, mac, "uptime", "Uptime",
-                             "duration", "s",
-                             "total_increasing", "mdi:timer-outline",
-                             "{{ value_json.uptime }}");
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"uptime\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Uptime\","
+            "\"device_class\":\"duration\","
+            "\"unit_of_measurement\":\"s\","
+            "\"state_class\":\"total_increasing\","
+            "\"icon\":\"mdi:timer-outline\","
+            "\"value_template\":\"{{ value_json.uptime }}\","
+            "\"unique_id\":\"linkey_%s_uptime\""
+        "}},",
+        mac);
+
+    // Shared state and availability topics
+    snprintf(payload + offset, sizeof(payload) - offset,
+        "\"state_topic\":\"%s\","
+        "\"availability_topic\":\"%s\""
+        "}",
+        MQTT_TOPIC_STATE, MQTT_TOPIC_STATUS);
+
+    // Publish with retain flag so HA remembers the config
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+    DEBUG_LOG(TAG, "Published HA device discovery");
 }
 
 // Publish online status to availability topic
@@ -196,8 +221,8 @@ void mqtt_init(mqtt_state_t *state, wifi_stop_fn_t wifi_stop_cb)
         },
         .network.timeout_ms = 1000,  // Reduced from 3000ms
         .network.refresh_connection_after_ms = 0,
-        .buffer.size = 512,
-        .buffer.out_size = 512,
+        .buffer.size = 1536,
+        .buffer.out_size = 1536,
     };
 
     if (strlen(MQTT_USERNAME) > 0) {
