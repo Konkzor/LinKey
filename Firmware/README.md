@@ -16,13 +16,20 @@ This firmware uses the ESP32's Ultra Low Power (ULP) coprocessor to continuously
   - WiFi modem sleep for power saving
   - Optional static IP (skips DHCP)
 - **MQTT optimizations**:
-  - QoS 0 for maximum speed
-  - Minimal buffers
+  - QoS 1 for reliable delivery and better wifi disconnection detection
   - Fast timeouts
+  - Last Will and Testament (LWT) for availability tracking
+- **Home Assistant integration**:
+  - MQTT device auto-discovery (single payload)
+  - Availability monitoring (online/offline)
+  - Custom icons and state classes for proper HA statistics
 - **Monitored values**:
   - `IINST`: Instantaneous current (Amperes)
   - `BASE`: Energy index (Watt-hours)
+  - `PAPP`: Apparent power (VA)
+  - `ADPS`: Overcurrent warning current (Amperes)
   - `VCAP`: Supercap voltage (millivolts)
+  - `uptime`: Device uptime (seconds)
 - **Multi-line buffering**: ULP collects 10 lines before waking CPU
 - **Checksum validation**: Validates Linky TIC checksum `(sum & 0x3F) + 0x20`
 - **RGB LED status**: Visual feedback for voltage and operation status
@@ -79,13 +86,14 @@ source ~/esp/v5.4.1/esp-idf/export.sh
 idf.py menuconfig
 ```
 
-Navigate to **"Linky Monitor Configuration"** and configure:
+Navigate to **"Linkey Monitor Configuration"** and configure:
 
 #### Required Settings:
+- **Device Name**: Name shown in Home Assistant (default: `Linkey`)
 - **WiFi SSID**: Your WiFi network name
 - **WiFi Password**: Your WiFi password
 - **MQTT Broker URI**: e.g., `mqtt://192.168.1.100`
-- **MQTT Topic Prefix**: Default `linky` (topics will be `linky/iinst`, `linky/base`, `linky/vcap`)
+- **MQTT Topic Prefix**: Default `linkey` (topics: `linkey/state`, `linkey/status`)
 - **Linky RX GPIO**: Default `14` (must be RTC-capable GPIO)
 
 #### Optional Settings:
@@ -147,12 +155,29 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ### MQTT Topics
 
-With default prefix `linky`:
-- `linky/iinst` - Instantaneous current in Amperes
-- `linky/base` - Total energy in Watt-hours
-- `linky/vcap` - Supercap voltage in millivolts
+With default prefix `linkey`:
+- `linkey/state` - JSON payload with sensor data (only valid values included):
+  ```json
+  {"iinst":3,"base":12345678,"papp":690,"vcap":2850,"uptime":3600}
+  ```
+- `linkey/status` - Device availability (`online`/`offline` via LWT)
 
-**Note**: Only values with valid checksums are published.
+**Note**: Only Linky values with valid checksums are included in the JSON. VCAP and uptime are always present.
+
+### Home Assistant
+
+The device is auto-discovered via MQTT. On connection, a single discovery payload is published to:
+```
+homeassistant/device/linkey_<mac>/config
+```
+
+This registers the device with all sensors in Home Assistant. The device appears with:
+- **Current** (IINST) - instantaneous measurement
+- **Energy Index** (BASE) - total increasing for energy dashboard
+- **Apparent Power** (PAPP) - instantaneous measurement
+- **Overcurrent Warning** (ADPS) - overcurrent alert
+- **Supercap Voltage** (VCAP) - instantaneous measurement
+- **Uptime** - device uptime in seconds
 
 ### LED Status Indicators
 
@@ -173,6 +198,8 @@ Example:
 ```
 IINST 003 :
 BASE 012345678 '
+PAPP 00690 +
+ADPS 030 !
 ```
 
 **Serial parameters**: 1200 baud, 7 data bits, Even parity, 1 stop bit (7E1)
@@ -197,28 +224,43 @@ Firmware/
 ├── main/
 │   ├── CMakeLists.txt          # Component CMake
 │   ├── Kconfig.projbuild       # Configuration menu
-│   ├── main.c                  # Main application (WiFi, MQTT, light sleep)
-│   ├── ulp_linky.cpp           # ULP program (7E1 UART, parsing)
+│   ├── main.c                  # FSM application (state machine, voltage monitoring)
+│   ├── ulp_linky.cpp           # ULP program (7E1 UART, TIC parsing)
 │   ├── ulp_linky.h             # ULP program header
-│   └── debug.h                 # Debug logging macro
+│   ├── wifi_manager.c          # WiFi connection management
+│   ├── wifi_manager.h          # WiFi manager header
+│   ├── mqtt_manager.c          # MQTT client, HA discovery, JSON publishing
+│   ├── mqtt_manager.h          # MQTT manager header
+│   └── debug.h                 # Debug logging macros
 └── HULP/                       # HULP library (submodule)
 ```
 
 ## Architecture
 
+### FSM States
+
+```
+INIT → WAIT_VOLTAGE → WIFI_CONNECT → MQTT_CONNECT → WAIT_ULP_DATA → PUBLISH_DATA
+                ↑                                                         │
+                └─────────────── voltage low ──────────────────────────────┘
+```
+
+Any state falls back to `WAIT_VOLTAGE` if supercap voltage drops below threshold.
+
+### System Overview
+
 ```
 ┌─────────────────────────────────────────────┐
-│  Main CPU (Light Sleep)                     │
-│  • WiFi/MQTT stay connected                 │
-│  • Wakes periodically                       │
-│  • Reads supercap voltage                   │
-│  • Publishes valid data                     │
-│  • Returns to light sleep                   │
-│  • Wake time: TBD                           │
+│  Main CPU (FSM) (Periodic wake)             │
+│  • Voltage monitoring with per-state        │
+│    fallback thresholds                      │
+│  • WiFi/MQTT connection management          │
+│  • HA auto-discovery on MQTT connect        │
+│  • JSON sensor data publishing              │
 │  • Modem sleep + CPU frequency scaling      │
 └─────────────────────────────────────────────┘
                     ▲
-                    │ Periodic wake
+                    │
                     │
 ┌─────────────────────────────────────────────┐
 │  ULP Coprocessor (Always Running)           │
@@ -232,8 +274,9 @@ Firmware/
 
 - [HULP Library](https://github.com/boarchuz/HULP)
 - [ESP32 ULP Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp.html)
-- [Linky TIC Documentation](https://www.enedis.fr/media/2035/download)
+- [Linky TIC Documentation](Doc/Enedis-MOP-CPT_002E.pdf) - Linky TIC specification (included in `Doc/`)
 - [ESP32 Power Management](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/power_management.html)
+- [HA MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 
 ## License
 
