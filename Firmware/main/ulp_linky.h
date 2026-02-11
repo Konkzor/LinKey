@@ -29,6 +29,8 @@ extern "C" {
  */
 #define LABEL_IINST         "IINST"      /**< Instantaneous current label */
 #define LABEL_BASE          "BASE"       /**< Base energy index label */
+#define LABEL_PAPP          "PAPP"       /**< Apparent power label */
+#define LABEL_ADPS          "ADPS"       /**< Overcurrent warning label */
 /** @} */
 
 /** @name Valid Flags for linky_data_t
@@ -36,6 +38,8 @@ extern "C" {
  */
 #define LINKY_FLAG_IINST    0x01         /**< IINST value is valid */
 #define LINKY_FLAG_BASE     0x02         /**< BASE value is valid */
+#define LINKY_FLAG_PAPP     0x04         /**< PAPP value is valid */
+#define LINKY_FLAG_ADPS     0x08         /**< ADPS value is valid */
 /** @} */
 
 /**
@@ -44,6 +48,8 @@ extern "C" {
 typedef struct {
     uint16_t iinst;        /**< Instantaneous current (A) */
     uint32_t base;         /**< Energy index (Wh) */
+    uint32_t papp;         /**< Apparent power (VA) */
+    uint16_t adps;         /**< Overcurrent warning current (A) */
     uint16_t valid_flags;  /**< Validity flags (LINKY_FLAG_*) */
     uint32_t voltage_cap;  /**< Supercap voltage (mV), filled by caller */
     uint32_t uptime_s;     /**< Device uptime (seconds), filled by caller */

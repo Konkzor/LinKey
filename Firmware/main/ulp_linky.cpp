@@ -143,7 +143,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
         while (*msg && isspace((unsigned char)*msg)) msg++;
         uint16_t iinst_temp = (uint16_t)parse_uint(msg, &len_parsed);
         if(len_parsed == 3){
-            DEBUG_LOG(TAG, "IINST: %d A", data->iinst);
+            DEBUG_LOG(TAG, "IINST: %d A", iinst_temp);
             data->iinst = iinst_temp;
             data->valid_flags |= LINKY_FLAG_IINST;
         }
@@ -152,10 +152,30 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
         msg += strlen(LABEL_BASE);
         while (*msg && isspace((unsigned char)*msg)) msg++;
         uint32_t base_temp = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){  
-            DEBUG_LOG(TAG, "BASE: %lu Wh", data->base );
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BASE: %lu Wh", base_temp);
             data->base = base_temp;
             data->valid_flags |= LINKY_FLAG_BASE;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_PAPP)) {
+        msg += strlen(LABEL_PAPP);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t papp_temp = parse_uint(msg, &len_parsed);
+        if(len_parsed == 5){
+            DEBUG_LOG(TAG, "PAPP: %lu VA", papp_temp);
+            data->papp = papp_temp;
+            data->valid_flags |= LINKY_FLAG_PAPP;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_ADPS)) {
+        msg += strlen(LABEL_ADPS);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint16_t adps_temp = (uint16_t)parse_uint(msg, &len_parsed);
+        if(len_parsed == 3){
+            DEBUG_LOGW(TAG, "ADPS: %d A (overcurrent!)", adps_temp);
+            data->adps = adps_temp;
+            data->valid_flags |= LINKY_FLAG_ADPS;
         }
     }
 }

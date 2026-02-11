@@ -58,7 +58,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 {
     const char *mac = get_device_mac_str();
     char topic[128];
-    char payload[1400];
+    char payload[1600];
     int offset = 0;
 
     // Device discovery topic
@@ -85,7 +85,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
     offset += snprintf(payload + offset, sizeof(payload) - offset,
         "\"o\":{\"name\":\"linkey\",\"sw\":\"%s\"},", FW_VERSION);
 
-    // Components
+    // Components (using HA abbreviated keys)
     offset += snprintf(payload + offset, sizeof(payload) - offset,
         "\"cmps\":{"
 
@@ -93,12 +93,12 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "\"iinst\":{"
             "\"p\":\"sensor\","
             "\"name\":\"Current\","
-            "\"device_class\":\"current\","
-            "\"unit_of_measurement\":\"A\","
-            "\"state_class\":\"measurement\","
-            "\"icon\":\"mdi:current-ac\","
-            "\"value_template\":\"{{ value_json.iinst }}\","
-            "\"unique_id\":\"linkey_%s_iinst\""
+            "\"dev_cla\":\"current\","
+            "\"unit_of_meas\":\"A\","
+            "\"stat_cla\":\"measurement\","
+            "\"ic\":\"mdi:current-ac\","
+            "\"val_tpl\":\"{{ value_json.iinst }}\","
+            "\"uniq_id\":\"linkey_%s_iinst\""
         "},",
         mac);
 
@@ -107,12 +107,12 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "\"base\":{"
             "\"p\":\"sensor\","
             "\"name\":\"Energy Index\","
-            "\"device_class\":\"energy\","
-            "\"unit_of_measurement\":\"Wh\","
-            "\"state_class\":\"total_increasing\","
-            "\"icon\":\"mdi:counter\","
-            "\"value_template\":\"{{ value_json.base }}\","
-            "\"unique_id\":\"linkey_%s_base\""
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.base }}\","
+            "\"uniq_id\":\"linkey_%s_base\""
         "},",
         mac);
 
@@ -121,12 +121,40 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "\"vcap\":{"
             "\"p\":\"sensor\","
             "\"name\":\"Supercap Voltage\","
-            "\"device_class\":\"voltage\","
-            "\"unit_of_measurement\":\"mV\","
-            "\"state_class\":\"measurement\","
-            "\"icon\":\"mdi:battery-heart-variant\","
-            "\"value_template\":\"{{ value_json.vcap }}\","
-            "\"unique_id\":\"linkey_%s_vcap\""
+            "\"dev_cla\":\"voltage\","
+            "\"unit_of_meas\":\"mV\","
+            "\"stat_cla\":\"measurement\","
+            "\"ic\":\"mdi:battery-heart-variant\","
+            "\"val_tpl\":\"{{ value_json.vcap }}\","
+            "\"uniq_id\":\"linkey_%s_vcap\""
+        "},",
+        mac);
+
+    // PAPP sensor (apparent power) - instantaneous measurement
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"papp\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Apparent Power\","
+            "\"dev_cla\":\"apparent_power\","
+            "\"unit_of_meas\":\"VA\","
+            "\"stat_cla\":\"measurement\","
+            "\"ic\":\"mdi:flash\","
+            "\"val_tpl\":\"{{ value_json.papp }}\","
+            "\"uniq_id\":\"linkey_%s_papp\""
+        "},",
+        mac);
+
+    // ADPS sensor (overcurrent warning) - instantaneous measurement
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"adps\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Overcurrent Warning\","
+            "\"dev_cla\":\"current\","
+            "\"unit_of_meas\":\"A\","
+            "\"stat_cla\":\"measurement\","
+            "\"ic\":\"mdi:alert\","
+            "\"val_tpl\":\"{{ value_json.adps }}\","
+            "\"uniq_id\":\"linkey_%s_adps\""
         "},",
         mac);
 
@@ -135,19 +163,19 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "\"uptime\":{"
             "\"p\":\"sensor\","
             "\"name\":\"Uptime\","
-            "\"device_class\":\"duration\","
-            "\"unit_of_measurement\":\"s\","
-            "\"state_class\":\"total_increasing\","
-            "\"icon\":\"mdi:timer-outline\","
-            "\"value_template\":\"{{ value_json.uptime }}\","
-            "\"unique_id\":\"linkey_%s_uptime\""
+            "\"dev_cla\":\"duration\","
+            "\"unit_of_meas\":\"s\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:timer-outline\","
+            "\"val_tpl\":\"{{ value_json.uptime }}\","
+            "\"uniq_id\":\"linkey_%s_uptime\""
         "}},",
         mac);
 
     // Shared state and availability topics
     snprintf(payload + offset, sizeof(payload) - offset,
-        "\"state_topic\":\"%s\","
-        "\"availability_topic\":\"%s\""
+        "\"stat_t\":\"%s\","
+        "\"avty_t\":\"%s\""
         "}",
         MQTT_TOPIC_STATE, MQTT_TOPIC_STATUS);
 
@@ -327,6 +355,22 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"base\":%lu", data->base);
+        first = false;
+    }
+
+    // Add PAPP if valid
+    if (data->valid_flags & LINKY_FLAG_PAPP) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"papp\":%lu", data->papp);
+        first = false;
+    }
+
+    // Add ADPS if valid
+    if (data->valid_flags & LINKY_FLAG_ADPS) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"adps\":%u", data->adps);
         first = false;
     }
 
