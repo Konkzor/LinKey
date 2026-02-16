@@ -9,11 +9,10 @@
 #include "esp_pm.h"
 #include "nvs_flash.h"
 #include "driver/gpio.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 #include "esp_timer.h"
 #include "types.h"
 #include "ulp_linky.h"
+#include "voltage_manager.h"
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
 #include "debug.h"
@@ -43,18 +42,6 @@ static const char *TAG = "LINKY_MAIN";
 #define LED_COLOR_MQTT_CONNECT     RGB_MAGENTA
 #define LED_COLOR_WAIT_ULP_DATA      RGB_YELLOW
 #define LED_COLOR_PUBLISH_DATA       RGB_GREEN
-
-// Supercap voltage ADC configuration (GPIO 33 = ADC1_CHANNEL_5)
-#define SUPERCAP_ADC_CHANNEL    ADC1_CHANNEL_5
-#define SUPERCAP_ADC_ATTEN      ADC_ATTEN_DB_12  // Full scale ~3.3V
-#define SUPERCAP_ADC_WIDTH      ADC_WIDTH_BIT_12
-
-// Voltage thresholds (millivolts)
-#define VOLTAGE_WIFI_START_MV   2500    // Minimum voltage to start WiFi
-
-// Per-state fallback thresholds (voltage to trigger fallback to WAIT_VOLTAGE)
-#define VOLTAGE_FALLBACK_MIN_MV         1500    // Minimum fallback threshold
-#define VOLTAGE_FALLBACK_DROP_MV        200     // Max allowed drop from peak
 
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
@@ -92,71 +79,6 @@ static mqtt_state_t mqtt_state = {0};
 
 // ULP initialization flag (one-time init)
 static bool ulp_initialized = false;
-
-// ADC calibration characteristics for supercap voltage reading
-static esp_adc_cal_characteristics_t *adc_chars = NULL;
-
-static void supercap_adc_init(void)
-{
-    // Configure ADC width (shared for all ADC1 channels - HULP may have set this already)
-    adc1_config_width(SUPERCAP_ADC_WIDTH);
-
-    // Configure channel attenuation
-    adc1_config_channel_atten(SUPERCAP_ADC_CHANNEL, SUPERCAP_ADC_ATTEN);
-
-    // Initialize calibration
-    adc_chars = calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_value_t cal_type = esp_adc_cal_characterize(
-        ADC_UNIT_1, SUPERCAP_ADC_ATTEN, SUPERCAP_ADC_WIDTH, 1100, adc_chars);
-
-    if (cal_type == ESP_ADC_CAL_VAL_EFUSE_TP) {
-        DEBUG_LOG(TAG, "ADC calibration: Two Point");
-    } else if (cal_type == ESP_ADC_CAL_VAL_EFUSE_VREF) {
-        DEBUG_LOG(TAG, "ADC calibration: eFuse Vref");
-    } else {
-        DEBUG_LOG(TAG, "ADC calibration: Default");
-    }
-
-    DEBUG_LOG(TAG, "Supercap ADC initialized (GPIO 33, ADC1_CH5)");
-}
-
-// Read supercap voltage in millivolts
-int supercap_read_voltage_mv(void)
-{
-    int raw_value = adc1_get_raw(SUPERCAP_ADC_CHANNEL);
-    uint32_t voltage_mv = esp_adc_cal_raw_to_voltage(raw_value, adc_chars);
-    return (int)voltage_mv;
-}
-
-// Check if voltage is below threshold (returns true if low voltage condition)
-static bool voltage_is_low(uint16_t threshold)
-{
-    int voltage_mv = supercap_read_voltage_mv();
-    if (voltage_mv < threshold) {
-        DEBUG_LOGW(TAG, "Voltage dropped to %d mV (threshold %d)", voltage_mv, threshold);
-        return true;
-    }
-    return false;
-}
-
-// Dynamic voltage peak tracker for drain detection
-static int dynamic_voltage_peak_mv = 0;
-
-static bool voltage_is_low_dynamic(uint16_t floor_mv)
-{
-    int voltage_mv = supercap_read_voltage_mv();
-    if (voltage_mv > dynamic_voltage_peak_mv) {
-        dynamic_voltage_peak_mv = voltage_mv;
-    }
-    int drop_threshold = dynamic_voltage_peak_mv - VOLTAGE_FALLBACK_DROP_MV;
-    uint16_t threshold = (drop_threshold > floor_mv) ? drop_threshold : floor_mv;
-    if (voltage_mv < threshold) {
-        DEBUG_LOGW(TAG, "Voltage %d mV below dynamic threshold %d mV (peak %d, floor %d)",
-                   voltage_mv, threshold, dynamic_voltage_peak_mv, floor_mv);
-        return true;
-    }
-    return false;
-}
 
 static void rgb_led_init(void)
 {
@@ -261,8 +183,8 @@ static app_state_t handle_state_init(void)
     // Initialize RGB LEDs
     rgb_led_init();
 
-    // Initialize supercap voltage ADC
-    supercap_adc_init();
+    // Initialize voltage monitoring
+    voltage_init();
 
     // Configure automatic power management for light sleep
     esp_pm_config_t pm_config = {
@@ -279,10 +201,10 @@ static app_state_t handle_state_init(void)
 // STATE_WAIT_VOLTAGE: Wait for voltage >= 2.5V
 static app_state_t handle_state_wait_voltage(void)
 {
-    int voltage_mv = supercap_read_voltage_mv();
+    int voltage_mv = voltage_read_mv();
     DEBUG_LOG(TAG, "Supercap voltage: %d mV", voltage_mv);
 
-    if (voltage_mv >= VOLTAGE_WIFI_START_MV) {
+    if (voltage_mv >= VOLTAGE_START_MV) {
         DEBUG_LOG(TAG, "Voltage sufficient - proceeding to WiFi init");
         return STATE_WIFI_CONNECT;
     }
@@ -428,7 +350,7 @@ static app_state_t handle_state_publish_data(void)
 
     // Get data from ULP
     get_linky_data(&linky_data);
-    linky_data.voltage_cap = supercap_read_voltage_mv();
+    linky_data.voltage_cap = voltage_read_mv();
     linky_data.uptime_s = (uint32_t)(esp_timer_get_time() / 1000000);
 
     // Check if data received
@@ -460,7 +382,7 @@ void app_main(void)
             if (current_state == STATE_MQTT_CONNECT ||
                 current_state == STATE_WAIT_ULP_DATA ||
                 current_state == STATE_PUBLISH_DATA) {
-                dynamic_voltage_peak_mv = 0;
+                voltage_reset_peak();
             }
             previous_state = current_state;
         }
