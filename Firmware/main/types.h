@@ -19,7 +19,8 @@ extern "C" {
 typedef enum {
     CONN_OK,           /**< Connection successful */
     CONN_FAILED,       /**< Connection failed (timeout or error) */
-    CONN_VOLTAGE_LOW   /**< Connection aborted due to low voltage */
+    CONN_VOLTAGE_LOW,   /**< Connection aborted due to low voltage */
+    CONN_WIFI_LOST,       /**< Connection aborted due to lost wifi */
 } conn_result_t;
 
 /**

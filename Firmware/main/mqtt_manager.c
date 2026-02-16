@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "esp_mac.h"
 #include "debug.h"
+#include "types.h"
 
 static const char *TAG = "MQTT_MGR";
 
@@ -216,8 +217,7 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_DELETED:
             DEBUG_LOGW(TAG, "MQTT message expired - stopping WiFi immediately");
             state->connected = false;
-            state->started = false;  // Mark MQTT as stopped (can't call esp_mqtt_client_stop from event handler)
-            // Call wifi_stop callback if provided
+            // Keep started=true so mqtt_stop() can properly call esp_mqtt_client_stop() later
             if (state->wifi_stop_cb) {
                 state->wifi_stop_cb();
             }
@@ -247,7 +247,7 @@ void mqtt_init(mqtt_state_t *state, wifi_stop_fn_t wifi_stop_cb)
             .qos = 1,
             .retain = 1
         },
-        .network.timeout_ms = 1000,  // Reduced from 3000ms
+        .network.timeout_ms = 1500,  // Must exceed WiFi modem sleep interval (~1s with listen_interval=10)
         .network.refresh_connection_after_ms = 0,
         .buffer.size = 1536,
         .buffer.out_size = 1536,
@@ -309,7 +309,7 @@ conn_result_t mqtt_connect(mqtt_state_t *state, voltage_check_fn_t voltage_check
         // Check if WiFi is still connected (exit early if AP lost)
         if (wifi_check && !wifi_check()) {
             DEBUG_LOGW(TAG, "WiFi lost during MQTT connect");
-            return CONN_FAILED;
+            return CONN_WIFI_LOST;
         }
 
         vTaskDelay(pdMS_TO_TICKS(poll_interval_ms));

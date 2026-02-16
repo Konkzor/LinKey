@@ -12,6 +12,7 @@
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "esp_timer.h"
+#include "types.h"
 #include "ulp_linky.h"
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
@@ -52,12 +53,8 @@ static const char *TAG = "LINKY_MAIN";
 #define VOLTAGE_WIFI_START_MV   2500    // Minimum voltage to start WiFi
 
 // Per-state fallback thresholds (voltage to trigger fallback to WAIT_VOLTAGE)
-#define VOLTAGE_FALLBACK_INIT           0       // No check (ADC not ready)
-#define VOLTAGE_FALLBACK_WAIT_VOLTAGE   0       // No check (already waiting)
-#define VOLTAGE_FALLBACK_WIFI_CONNECT   1500    // High current draw expected
-#define VOLTAGE_FALLBACK_MQTT_CONNECT   2000    // Medium current
-#define VOLTAGE_FALLBACK_WAIT_ULP_DATA  2000    // Low current
-#define VOLTAGE_FALLBACK_PUBLISH_DATA   2000    // Medium current (WiFi TX)
+#define VOLTAGE_FALLBACK_MIN_MV         1500    // Minimum fallback threshold
+#define VOLTAGE_FALLBACK_DROP_MV        200     // Max allowed drop from peak
 
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
@@ -85,16 +82,6 @@ static const uint8_t state_colors[] = {
     LED_COLOR_MQTT_CONNECT,
     LED_COLOR_WAIT_ULP_DATA,
     LED_COLOR_PUBLISH_DATA
-};
-
-// Per-state voltage fallback thresholds lookup table
-static const uint16_t state_voltage_thresholds[] = {
-    VOLTAGE_FALLBACK_INIT,
-    VOLTAGE_FALLBACK_WAIT_VOLTAGE,
-    VOLTAGE_FALLBACK_WIFI_CONNECT,
-    VOLTAGE_FALLBACK_MQTT_CONNECT,
-    VOLTAGE_FALLBACK_WAIT_ULP_DATA,
-    VOLTAGE_FALLBACK_PUBLISH_DATA
 };
 
 // WiFi state (owned by main, passed to wifi_manager)
@@ -152,6 +139,25 @@ static bool voltage_is_low(uint16_t threshold)
     return false;
 }
 
+// Dynamic voltage peak tracker for drain detection
+static int dynamic_voltage_peak_mv = 0;
+
+static bool voltage_is_low_dynamic(uint16_t floor_mv)
+{
+    int voltage_mv = supercap_read_voltage_mv();
+    if (voltage_mv > dynamic_voltage_peak_mv) {
+        dynamic_voltage_peak_mv = voltage_mv;
+    }
+    int drop_threshold = dynamic_voltage_peak_mv - VOLTAGE_FALLBACK_DROP_MV;
+    uint16_t threshold = (drop_threshold > floor_mv) ? drop_threshold : floor_mv;
+    if (voltage_mv < threshold) {
+        DEBUG_LOGW(TAG, "Voltage %d mV below dynamic threshold %d mV (peak %d, floor %d)",
+                   voltage_mv, threshold, dynamic_voltage_peak_mv, floor_mv);
+        return true;
+    }
+    return false;
+}
+
 static void rgb_led_init(void)
 {
     gpio_config_t io_conf = {
@@ -187,6 +193,13 @@ static void rgb_led_blink(uint8_t color, int duration_ms)
     rgb_led_set(RGB_OFF);
 }
 
+// Stop WiFi and MQTT (WiFi first to cut radio power immediately)
+static void stop_all_connections(void)
+{
+    wifi_stop(&wifi_state);
+    mqtt_stop(&mqtt_state);
+}
+
 // Emergency WiFi stop callback for MQTT event handler (called on message expiry)
 static void emergency_wifi_stop(void)
 {
@@ -204,8 +217,12 @@ static conn_result_t ulp_wait_data(void)
     linky_data_t data;
     while (wait_ms < ULP_DATA_TIMEOUT_MS) {
         // Check voltage
-        if (voltage_is_low(VOLTAGE_FALLBACK_WAIT_ULP_DATA)) {
+        if (voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV)) {
             return CONN_VOLTAGE_LOW;
+        }
+            // Check if WiFi is still connected
+        if (!wifi_is_connected() || !mqtt_is_connected(&mqtt_state)) {
+            return CONN_WIFI_LOST;
         }
 
         vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
@@ -291,7 +308,7 @@ static app_state_t handle_state_wifi_connect(void)
     DEBUG_LOG(TAG, "Connecting to WiFi...");
 
     conn_result_t result = wifi_connect(&wifi_state, voltage_is_low,
-                                        VOLTAGE_FALLBACK_WIFI_CONNECT,
+                                        VOLTAGE_FALLBACK_MIN_MV,
                                         WIFI_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
     switch (result) {
         case CONN_OK:
@@ -299,13 +316,13 @@ static app_state_t handle_state_wifi_connect(void)
             return STATE_MQTT_CONNECT;
 
         case CONN_FAILED:
+        case CONN_WIFI_LOST:
             DEBUG_LOG(TAG, "WiFi connection failed - retrying...");
             return STATE_WIFI_CONNECT;
 
         case CONN_VOLTAGE_LOW:
             DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            mqtt_stop(&mqtt_state);
-            wifi_stop(&wifi_state);
+            stop_all_connections();
             return STATE_WAIT_VOLTAGE;
     }
 
@@ -321,19 +338,10 @@ static app_state_t handle_state_mqtt_connect(void)
         mqtt_init(&mqtt_state, emergency_wifi_stop);
     }
 
-    // Check if WiFi is still connected
-    if (!wifi_is_connected()) {
-        DEBUG_LOGW(TAG, "WiFi lost - returning to WIFI_CONNECT");
-        xEventGroupClearBits(wifi_state.event_group, WIFI_CONNECTED_BIT);
-        mqtt_stop(&mqtt_state);
-        wifi_stop(&wifi_state);
-        return STATE_WIFI_CONNECT;
-    }
-
     DEBUG_LOG(TAG, "Connecting to MQTT...");
-
-    conn_result_t result = mqtt_connect(&mqtt_state, voltage_is_low,
-                                        VOLTAGE_FALLBACK_MQTT_CONNECT, wifi_is_connected,
+    // Connect MQTT with voltage checks (dynamic threshold) and WiFi checks (exit early if WiFi lost)
+    conn_result_t result = mqtt_connect(&mqtt_state, voltage_is_low_dynamic,
+                                        VOLTAGE_FALLBACK_MIN_MV, wifi_is_connected,
                                         MQTT_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
     switch (result) {
         case CONN_OK:
@@ -346,9 +354,13 @@ static app_state_t handle_state_mqtt_connect(void)
 
         case CONN_VOLTAGE_LOW:
             DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            mqtt_stop(&mqtt_state);
-            wifi_stop(&wifi_state);
+            stop_all_connections();
             return STATE_WAIT_VOLTAGE;
+        
+        case CONN_WIFI_LOST:
+            DEBUG_LOGW(TAG, "WiFi lost during MQTT connect - returning to WIFI_CONNECT");
+            stop_all_connections();
+            return STATE_WIFI_CONNECT;
     }
 
     return STATE_MQTT_CONNECT;  // Should not reach here
@@ -362,21 +374,6 @@ static app_state_t handle_state_wait_ulp_data(void)
         DEBUG_LOG(TAG, "Initializing ULP...");
         init_ulp_linky();
         ulp_initialized = true;
-    }
-
-    // Check if WiFi is still connected
-    if (!wifi_is_connected()) {
-        DEBUG_LOGW(TAG, "WiFi lost - returning to WIFI_CONNECT");
-        xEventGroupClearBits(wifi_state.event_group, WIFI_CONNECTED_BIT);
-        mqtt_stop(&mqtt_state);
-        wifi_stop(&wifi_state);
-        return STATE_WIFI_CONNECT;
-    }
-
-    // Check if MQTT is still connected
-    if (!mqtt_is_connected(&mqtt_state)) {
-        DEBUG_LOGW(TAG, "MQTT lost - returning to MQTT_CONNECT");
-        return STATE_MQTT_CONNECT;
     }
 
     DEBUG_LOG(TAG, "Waiting for ULP data...");
@@ -393,9 +390,13 @@ static app_state_t handle_state_wait_ulp_data(void)
 
         case CONN_VOLTAGE_LOW:
             DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            mqtt_stop(&mqtt_state);
-            wifi_stop(&wifi_state);
+            stop_all_connections();
             return STATE_WAIT_VOLTAGE;
+        
+        case CONN_WIFI_LOST:
+            DEBUG_LOGW(TAG, "WiFi or MQTT lost during ULP wait - returning to WIFI_CONNECT");
+            stop_all_connections();
+            return STATE_WIFI_CONNECT;
     }
 
     return STATE_WAIT_ULP_DATA;  // Should not reach here
@@ -407,18 +408,15 @@ static app_state_t handle_state_publish_data(void)
     linky_data_t linky_data;
 
     // Check voltage (global check already done in main loop, but double-check here)
-    if (voltage_is_low(VOLTAGE_FALLBACK_PUBLISH_DATA)) {
-        mqtt_stop(&mqtt_state);
-        wifi_stop(&wifi_state);
+    if (voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV)) {
+        stop_all_connections();
         return STATE_WAIT_VOLTAGE;
     }
 
     // Check WiFi connection
     if (!wifi_is_connected()) {
         DEBUG_LOGW(TAG, "WiFi disconnected - returning to WIFI_CONNECT");
-        xEventGroupClearBits(wifi_state.event_group, WIFI_CONNECTED_BIT);
-        mqtt_stop(&mqtt_state);
-        wifi_stop(&wifi_state);
+        stop_all_connections();
         return STATE_WIFI_CONNECT;
     }
 
@@ -454,15 +452,29 @@ static app_state_t handle_state_publish_data(void)
 void app_main(void)
 {
     DEBUG_LOG(TAG, "Starting FSM...");
+    app_state_t previous_state = STATE_INIT;
 
     while (1) {
+        // Reset dynamic peak tracker on state transitions into dynamic states
+        if (current_state != previous_state) {
+            if (current_state == STATE_MQTT_CONNECT ||
+                current_state == STATE_WAIT_ULP_DATA ||
+                current_state == STATE_PUBLISH_DATA) {
+                dynamic_voltage_peak_mv = 0;
+            }
+            previous_state = current_state;
+        }
+
         // Voltage check only possible after INIT (ADC must be initialized first)
-        if (current_state != STATE_INIT) {
-            uint16_t threshold = state_voltage_thresholds[current_state];
-            // Global voltage check using per-state threshold (0 = no check)
-            if (threshold > 0 && voltage_is_low(threshold)) {
-                mqtt_stop(&mqtt_state);
-                wifi_stop(&wifi_state);
+        if (current_state != STATE_INIT && current_state != STATE_WAIT_VOLTAGE) {
+            bool low = false;
+            if (current_state == STATE_WIFI_CONNECT) {
+                low = voltage_is_low(VOLTAGE_FALLBACK_MIN_MV);
+            } else {
+                low = voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
+            }
+            if (low) {
+                stop_all_connections();
                 current_state = STATE_WAIT_VOLTAGE;
             }
         }
