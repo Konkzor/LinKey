@@ -215,26 +215,19 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             state->connected = false;
             break;
         case MQTT_EVENT_DELETED:
-            DEBUG_LOGW(TAG, "MQTT message expired - stopping WiFi immediately");
+            DEBUG_LOGW(TAG, "MQTT message expired");
             state->connected = false;
-            // Keep started=true so mqtt_stop() can properly call esp_mqtt_client_stop() later
-            if (state->wifi_stop_cb) {
-                state->wifi_stop_cb();
-            }
             break;
         default:
             break;
     }
 }
 
-void mqtt_init(mqtt_state_t *state, wifi_stop_fn_t wifi_stop_cb)
+void mqtt_init(mqtt_state_t *state)
 {
     if (!state || state->initialized) {
         return;
     }
-
-    // Store callback in state
-    state->wifi_stop_cb = wifi_stop_cb;
 
     esp_mqtt_client_config_t mqtt_cfg = {
         .broker.address.uri = MQTT_BROKER_URI,

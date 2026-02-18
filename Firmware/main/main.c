@@ -122,16 +122,6 @@ static void stop_all_connections(void)
     mqtt_stop(&mqtt_state);
 }
 
-// Emergency WiFi stop callback for MQTT event handler (called on message expiry)
-static void emergency_wifi_stop(void)
-{
-    if (wifi_state.started) {
-        esp_wifi_stop();
-        wifi_state.started = false;
-        xEventGroupClearBits(wifi_state.event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-    }
-}
-
 // Wait for ULP data to be received (with voltage checks)
 static conn_result_t ulp_wait_data(void)
 {
@@ -257,7 +247,7 @@ static app_state_t handle_state_mqtt_connect(void)
     // One-time MQTT initialization
     if (!mqtt_state.initialized) {
         DEBUG_LOG(TAG, "Initializing MQTT...");
-        mqtt_init(&mqtt_state, emergency_wifi_stop);
+        mqtt_init(&mqtt_state);
     }
 
     DEBUG_LOG(TAG, "Connecting to MQTT...");

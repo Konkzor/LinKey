@@ -15,12 +15,6 @@ extern "C" {
 #endif
 
 /**
- * @brief WiFi stop callback type
- * @note Called from MQTT event handler on message expiry for emergency power saving
- */
-typedef void (*wifi_stop_fn_t)(void);
-
-/**
  * @brief WiFi connection check callback type
  * @return true if WiFi is connected
  */
@@ -35,19 +29,16 @@ typedef struct {
     bool started;                  /**< esp_mqtt_client_start() has been called */
     bool connected;                /**< Currently connected to broker */
     esp_mqtt_client_handle_t client; /**< ESP-MQTT client handle */
-    wifi_stop_fn_t wifi_stop_cb;   /**< Callback for emergency WiFi stop */
 } mqtt_state_t;
 
 /**
  * @brief Initialize MQTT client (one-time)
  *
  * Creates MQTT client with credentials from Kconfig and registers event handlers.
- * Uses reduced keepalive (5s) and timeout (1s) for faster disconnect detection.
  *
- * @param[in,out] state        MQTT state structure (caller-owned)
- * @param[in]     wifi_stop_cb Callback to stop WiFi on message expiry (NULL to skip)
+ * @param[in,out] state MQTT state structure (caller-owned)
  */
-void mqtt_init(mqtt_state_t *state, wifi_stop_fn_t wifi_stop_cb);
+void mqtt_init(mqtt_state_t *state);
 
 /**
  * @brief Stop MQTT client
