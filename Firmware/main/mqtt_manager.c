@@ -470,75 +470,92 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
         first = false;
     }
 
-    // Add energy index fields (tariff-dependent)
-#if defined(CONFIG_LINKEY_TARIFF_HPHC)
-    if (data->valid_flags & LINKY_FLAG_HCHC) {
+    // Add energy index fields only on change (tariff-dependent)
+#if defined(CONFIG_LINKY_TARIFF_HPHC)
+    static uint32_t last_hchc = 0, last_hchp = 0;
+    if ((data->valid_flags & LINKY_FLAG_HCHC) && data->hchc != last_hchc) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"hchc\":%lu", data->hchc);
+        last_hchc = data->hchc;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_HCHP) {
+    if ((data->valid_flags & LINKY_FLAG_HCHP) && data->hchp != last_hchp) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"hchp\":%lu", data->hchp);
+        last_hchp = data->hchp;
         first = false;
     }
 #elif defined(CONFIG_LINKEY_TARIFF_EJP)
-    if (data->valid_flags & LINKY_FLAG_EJPHN) {
+    static uint32_t last_ejphn = 0, last_ejphpm = 0;
+    if ((data->valid_flags & LINKY_FLAG_EJPHN) && data->ejphn != last_ejphn) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"ejphn\":%lu", data->ejphn);
+        last_ejphn = data->ejphn;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_EJPHPM) {
+    if ((data->valid_flags & LINKY_FLAG_EJPHPM) && data->ejphpm != last_ejphpm) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"ejphpm\":%lu", data->ejphpm);
+        last_ejphpm = data->ejphpm;
         first = false;
     }
 #elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
-    if (data->valid_flags & LINKY_FLAG_BBRHCJB) {
+    static uint32_t last_bbrhcjb = 0, last_bbrhpjb = 0;
+    static uint32_t last_bbrhcjw = 0, last_bbrhpjw = 0;
+    static uint32_t last_bbrhcjr = 0, last_bbrhpjr = 0;
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJB) && data->bbrhcjb != last_bbrhcjb) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhcjb\":%lu", data->bbrhcjb);
+        last_bbrhcjb = data->bbrhcjb;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_BBRHPJB) {
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJB) && data->bbrhpjb != last_bbrhpjb) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhpjb\":%lu", data->bbrhpjb);
+        last_bbrhpjb = data->bbrhpjb;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_BBRHCJW) {
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJW) && data->bbrhcjw != last_bbrhcjw) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhcjw\":%lu", data->bbrhcjw);
+        last_bbrhcjw = data->bbrhcjw;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_BBRHPJW) {
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJW) && data->bbrhpjw != last_bbrhpjw) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhpjw\":%lu", data->bbrhpjw);
+        last_bbrhpjw = data->bbrhpjw;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_BBRHCJR) {
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJR) && data->bbrhcjr != last_bbrhcjr) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhcjr\":%lu", data->bbrhcjr);
+        last_bbrhcjr = data->bbrhcjr;
         first = false;
     }
-    if (data->valid_flags & LINKY_FLAG_BBRHPJR) {
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJR) && data->bbrhpjr != last_bbrhpjr) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"bbrhpjr\":%lu", data->bbrhpjr);
+        last_bbrhpjr = data->bbrhpjr;
         first = false;
     }
 #else // BASE
-    if (data->valid_flags & LINKY_FLAG_BASE) {
+    static uint32_t last_base = 0;
+    if ((data->valid_flags & LINKY_FLAG_BASE) && data->base != last_base) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"base\":%lu", data->base);
+        last_base = data->base;
         first = false;
     }
 #endif
