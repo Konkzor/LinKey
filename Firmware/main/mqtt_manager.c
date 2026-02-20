@@ -343,7 +343,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             break;
         case MQTT_EVENT_DELETED:
             DEBUG_LOGW(TAG, "MQTT message expired");
-            state->connected = false;
             break;
         default:
             break;
