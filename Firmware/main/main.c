@@ -142,7 +142,7 @@ static conn_result_t ulp_wait_data(void)
 
         get_linky_data(&data);
         if (data.valid_flags != 0) {
-            DEBUG_LOG(TAG, "ULP data received - IINST: %u, BASE: %lu", data.iinst, data.base);
+            DEBUG_LOG(TAG, "ULP data received (flags: 0x%04x)", data.valid_flags);
             return CONN_OK;
         }
     }
@@ -349,8 +349,8 @@ static app_state_t handle_state_publish_data(void)
         return STATE_WAIT_ULP_DATA;
     }
 
-    DEBUG_LOG(TAG, "Linky data - IINST: %u A, BASE: %lu Wh",
-            linky_data.iinst, linky_data.base);
+    DEBUG_LOG(TAG, "Linky data received (flags: 0x%04x, IINST: %u A)",
+            linky_data.valid_flags, linky_data.iinst);
 
     // Publish data
     if (!mqtt_publish_linky_data(&mqtt_state, &linky_data)) {

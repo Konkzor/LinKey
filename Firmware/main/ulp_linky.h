@@ -28,18 +28,50 @@ extern "C" {
  * @{
  */
 #define LABEL_IINST         "IINST"      /**< Instantaneous current label */
-#define LABEL_BASE          "BASE"       /**< Base energy index label */
 #define LABEL_PAPP          "PAPP"       /**< Apparent power label */
 #define LABEL_ADPS          "ADPS"       /**< Overcurrent warning label */
+
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define LABEL_HCHC          "HCHC"       /**< Off-peak energy index label */
+#define LABEL_HCHP          "HCHP"       /**< Peak energy index label */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define LABEL_EJPHN         "EJPHN"      /**< Normal hours energy index label */
+#define LABEL_EJPHPM        "EJPHPM"     /**< Mobile peak energy index label */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define LABEL_BBRHCJB       "BBRHCJB"    /**< Blue off-peak energy index label */
+#define LABEL_BBRHPJB       "BBRHPJB"    /**< Blue peak energy index label */
+#define LABEL_BBRHCJW       "BBRHCJW"    /**< White off-peak energy index label */
+#define LABEL_BBRHPJW       "BBRHPJW"    /**< White peak energy index label */
+#define LABEL_BBRHCJR       "BBRHCJR"    /**< Red off-peak energy index label */
+#define LABEL_BBRHPJR       "BBRHPJR"    /**< Red peak energy index label */
+#else // BASE (default)
+#define LABEL_BASE          "BASE"       /**< Base energy index label */
+#endif
 /** @} */
 
 /** @name Valid Flags for linky_data_t
  * @{
  */
 #define LINKY_FLAG_IINST    0x01         /**< IINST value is valid */
-#define LINKY_FLAG_BASE     0x02         /**< BASE value is valid */
 #define LINKY_FLAG_PAPP     0x04         /**< PAPP value is valid */
 #define LINKY_FLAG_ADPS     0x08         /**< ADPS value is valid */
+
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define LINKY_FLAG_HCHC     0x02         /**< HCHC value is valid */
+#define LINKY_FLAG_HCHP     0x10         /**< HCHP value is valid */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define LINKY_FLAG_EJPHN    0x02         /**< EJPHN value is valid */
+#define LINKY_FLAG_EJPHPM   0x10         /**< EJPHPM value is valid */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define LINKY_FLAG_BBRHCJB  0x02         /**< BBRHCJB value is valid */
+#define LINKY_FLAG_BBRHPJB  0x10         /**< BBRHPJB value is valid */
+#define LINKY_FLAG_BBRHCJW  0x20         /**< BBRHCJW value is valid */
+#define LINKY_FLAG_BBRHPJW  0x40         /**< BBRHPJW value is valid */
+#define LINKY_FLAG_BBRHCJR  0x80         /**< BBRHCJR value is valid */
+#define LINKY_FLAG_BBRHPJR  0x100        /**< BBRHPJR value is valid */
+#else // BASE
+#define LINKY_FLAG_BASE     0x02         /**< BASE value is valid */
+#endif
 /** @} */
 
 /**
@@ -47,7 +79,22 @@ extern "C" {
  */
 typedef struct {
     uint16_t iinst;        /**< Instantaneous current (A) */
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    uint32_t hchc;         /**< Off-peak energy index (Wh) */
+    uint32_t hchp;         /**< Peak energy index (Wh) */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    uint32_t ejphn;        /**< Normal hours energy index (Wh) */
+    uint32_t ejphpm;       /**< Mobile peak energy index (Wh) */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    uint32_t bbrhcjb;      /**< Blue off-peak energy index (Wh) */
+    uint32_t bbrhpjb;      /**< Blue peak energy index (Wh) */
+    uint32_t bbrhcjw;      /**< White off-peak energy index (Wh) */
+    uint32_t bbrhpjw;      /**< White peak energy index (Wh) */
+    uint32_t bbrhcjr;      /**< Red off-peak energy index (Wh) */
+    uint32_t bbrhpjr;      /**< Red peak energy index (Wh) */
+#else // BASE
     uint32_t base;         /**< Energy index (Wh) */
+#endif
     uint32_t papp;         /**< Apparent power (VA) */
     uint16_t adps;         /**< Overcurrent warning current (A) */
     uint16_t valid_flags;  /**< Validity flags (LINKY_FLAG_*) */

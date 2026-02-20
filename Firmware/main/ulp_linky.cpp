@@ -148,6 +148,110 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
             data->valid_flags |= LINKY_FLAG_IINST;
         }
     }
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    else if (str_starts_with(msg, LABEL_HCHC)) {
+        msg += strlen(LABEL_HCHC);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "HCHC: %lu Wh", val);
+            data->hchc = val;
+            data->valid_flags |= LINKY_FLAG_HCHC;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_HCHP)) {
+        msg += strlen(LABEL_HCHP);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "HCHP: %lu Wh", val);
+            data->hchp = val;
+            data->valid_flags |= LINKY_FLAG_HCHP;
+        }
+    }
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    else if (str_starts_with(msg, LABEL_EJPHN)) {
+        msg += strlen(LABEL_EJPHN);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "EJPHN: %lu Wh", val);
+            data->ejphn = val;
+            data->valid_flags |= LINKY_FLAG_EJPHN;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_EJPHPM)) {
+        msg += strlen(LABEL_EJPHPM);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "EJPHPM: %lu Wh", val);
+            data->ejphpm = val;
+            data->valid_flags |= LINKY_FLAG_EJPHPM;
+        }
+    }
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    else if (str_starts_with(msg, LABEL_BBRHCJB)) {
+        msg += strlen(LABEL_BBRHCJB);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHCJB: %lu Wh", val);
+            data->bbrhcjb = val;
+            data->valid_flags |= LINKY_FLAG_BBRHCJB;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_BBRHPJB)) {
+        msg += strlen(LABEL_BBRHPJB);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHPJB: %lu Wh", val);
+            data->bbrhpjb = val;
+            data->valid_flags |= LINKY_FLAG_BBRHPJB;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_BBRHCJW)) {
+        msg += strlen(LABEL_BBRHCJW);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHCJW: %lu Wh", val);
+            data->bbrhcjw = val;
+            data->valid_flags |= LINKY_FLAG_BBRHCJW;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_BBRHPJW)) {
+        msg += strlen(LABEL_BBRHPJW);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHPJW: %lu Wh", val);
+            data->bbrhpjw = val;
+            data->valid_flags |= LINKY_FLAG_BBRHPJW;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_BBRHCJR)) {
+        msg += strlen(LABEL_BBRHCJR);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHCJR: %lu Wh", val);
+            data->bbrhcjr = val;
+            data->valid_flags |= LINKY_FLAG_BBRHCJR;
+        }
+    }
+    else if (str_starts_with(msg, LABEL_BBRHPJR)) {
+        msg += strlen(LABEL_BBRHPJR);
+        while (*msg && isspace((unsigned char)*msg)) msg++;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if(len_parsed == 9){
+            DEBUG_LOG(TAG, "BBRHPJR: %lu Wh", val);
+            data->bbrhpjr = val;
+            data->valid_flags |= LINKY_FLAG_BBRHPJR;
+        }
+    }
+#else // BASE
     else if (str_starts_with(msg, LABEL_BASE)) {
         msg += strlen(LABEL_BASE);
         while (*msg && isspace((unsigned char)*msg)) msg++;
@@ -158,6 +262,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
             data->valid_flags |= LINKY_FLAG_BASE;
         }
     }
+#endif
     else if (str_starts_with(msg, LABEL_PAPP)) {
         msg += strlen(LABEL_PAPP);
         while (*msg && isspace((unsigned char)*msg)) msg++;

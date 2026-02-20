@@ -77,6 +77,27 @@ menu "Linkey Monitor Configuration"
         help
             Network mask.
 
+    choice LINKEY_TARIFF_OPTION
+        prompt "Tariff Option"
+        default LINKEY_TARIFF_BASE
+        help
+            Select the Linky tariff option to determine which energy
+            index labels are parsed and published.
+
+        config LINKEY_TARIFF_BASE
+            bool "BASE"
+
+        config LINKEY_TARIFF_HPHC
+            bool "HPHC"
+
+        config LINKEY_TARIFF_EJP
+            bool "EJP"
+
+        config LINKEY_TARIFF_TEMPO
+            bool "TEMPO"
+
+    endchoice
+
     config LINKEY_DEBUG_LOGS
         bool "Enable debug logging"
         default n
