@@ -470,7 +470,7 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
     }
 
     // Add energy index fields only on change (tariff-dependent)
-#if defined(CONFIG_LINKY_TARIFF_HPHC)
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
     static uint32_t last_hchc = 0, last_hchp = 0;
     if ((data->valid_flags & LINKY_FLAG_HCHC) && data->hchc != last_hchc) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");

@@ -46,7 +46,17 @@ static const char *TAG = "LINKY_MAIN";
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
 #define MQTT_CONNECT_TIMEOUT_MS 1000    // MQTT connection timeout
-#define ULP_DATA_TIMEOUT_MS     500     // Timeout waiting for ULP data
+// Timeout waiting for ULP data: frame-level reception needs at least 2 frame periods
+// (partial frame + first complete frame) before valid data is available
+#if defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define ULP_DATA_TIMEOUT_MS     5000
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define ULP_DATA_TIMEOUT_MS     4000
+#elif defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define ULP_DATA_TIMEOUT_MS     3500
+#else
+#define ULP_DATA_TIMEOUT_MS     3000
+#endif
 #define POLL_INTERVAL_MS        100     // Polling interval in connect/wait loops
 
 // FSM States

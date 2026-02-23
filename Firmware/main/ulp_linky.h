@@ -21,7 +21,7 @@ extern "C" {
  */
 #define LINKY_RX_GPIO       GPIO_NUM_14  /**< GPIO for TIC serial input */
 #define LINKY_BAUD_RATE     1200         /**< TIC baud rate (1200 bps) */
-#define LINKY_MAX_MSG_LEN   32           /**< Maximum message length */
+#define LINKY_MAX_FRAME_LEN   250           /**< Maximum frame set length (TEMPO ≈ 245 bytes) */
 /** @} */
 
 /** @name TIC Message Labels
@@ -103,36 +103,33 @@ typedef struct {
 } linky_data_t;
 
 /** @name ULP RTC Buffers
- * @brief Ring buffers in RTC slow memory shared between ULP and main CPU
+ * @brief Double-buffered frame buffers in RTC slow memory (ping-pong)
+ *
+ * ULP alternates between buf_0 and buf_1, receiving full TIC frame sets
+ * (terminated by ETX 0x03). After each frame, ulp_active_buf indicates
+ * which buffer the CPU should read (the one just completed).
  * @{
  */
-extern ulp_var_t ulp_rx_buffer[];
-extern ulp_var_t ulp_rx_line1[];
-extern ulp_var_t ulp_rx_line2[];
-extern ulp_var_t ulp_rx_line3[];
-extern ulp_var_t ulp_rx_line4[];
-extern ulp_var_t ulp_rx_line5[];
-extern ulp_var_t ulp_rx_line6[];
-extern ulp_var_t ulp_rx_line7[];
-extern ulp_var_t ulp_rx_line8[];
-extern ulp_var_t ulp_rx_line9[];
-extern ulp_var_t ulp_rx_line10[];
+extern ulp_var_t ulp_frame_buf_0[];
+extern ulp_var_t ulp_frame_buf_1[];
+extern ulp_var_t ulp_active_buf;
 /** @} */
 
 /**
  * @brief Initialize and start ULP Linky decoder
  *
  * Loads ULP program implementing 7E1 UART RX at 1200 baud.
- * ULP continuously receives TIC frames into 10 ring buffers.
- * Main CPU polls buffers periodically via get_linky_data().
+ * ULP continuously receives TIC frame sets (ETX-terminated) into
+ * double-buffered RTC memory. Main CPU polls via get_linky_data().
  */
 void init_ulp_linky(void);
 
 /**
- * @brief Get decoded data from ULP buffers
+ * @brief Get decoded data from ULP frame buffer
  *
- * Reads all 10 line buffers, validates checksums, and parses
- * IINST/BASE values. Sets valid_flags for successfully decoded fields.
+ * Reads the active frame buffer (indicated by ulp_active_buf),
+ * extracts individual data groups (between LF/CR delimiters),
+ * validates checksums, and parses label values.
  *
  * @param[out] data Structure to fill with decoded values (zeroed first)
  */

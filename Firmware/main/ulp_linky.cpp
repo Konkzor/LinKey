@@ -59,17 +59,10 @@ static const char *TAG = "ULP_LINKY";
     M_INCLUDE_UART_RX_7E1(label_entry, baud_rate, rx_gpio, R1, R2, R3, termination_char)
 
 // RTC_DATA_ATTR variables are stored in RTC slow memory and persist across deep sleep
-RTC_DATA_ATTR ulp_var_t ulp_rx_buffer HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line1 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line2 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line3 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line4 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line5 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line6 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line7 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line8 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line9 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line10 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
+// Double-buffered frame reception: ULP alternates between buf_0 and buf_1
+RTC_DATA_ATTR ulp_var_t ulp_frame_buf_0 HULP_UART_STRING_BUFFER(LINKY_MAX_FRAME_LEN);
+RTC_DATA_ATTR ulp_var_t ulp_frame_buf_1 HULP_UART_STRING_BUFFER(LINKY_MAX_FRAME_LEN);
+RTC_DATA_ATTR ulp_var_t ulp_active_buf;  // 0 or 1: which buffer CPU should read
 
 // Helper to compare strings in ULP context
 // Returns 1 if str1 starts with str2
@@ -96,7 +89,7 @@ static uint32_t parse_uint(const char *str, int *len) {
 }
 
 // Validate Linky checksum
-// Format: "LABEL DATA CS\r\n"
+// Format: "LABEL\tDATA\tCS\r" (data group extracted from TIC frame)
 // Checksum = (sum_of_bytes & 0x3F) + 0x20
 static int validate_checksum(const char *msg, int msg_len) {
     if (msg_len < 5) return 0; // Too short
@@ -289,60 +282,40 @@ void init_ulp_linky(void)
 {
     DEBUG_LOG(TAG, "Initializing ULP for Linky monitoring");
 
-    // Labels for ULP program - follow HULP example pattern
+    // Labels for ULP program
     enum {
-        LBL_RX_INIT,
-        LBL_MAIN_LOOP,
-        LBL_RX_LINE1,
-        LBL_RX_LINE2,
-        LBL_RX_LINE3,
-        LBL_RX_LINE4,
-        LBL_RX_LINE5,
-        LBL_RX_LINE6,
-        LBL_RX_LINE7,
-        LBL_RX_LINE8,
-        LBL_RX_LINE9,
-        LBL_RX_LINE10,
+        LBL_LOOP,
+        LBL_RX_0,
+        LBL_RX_1,
         LBL_SUBROUTINE_RX_ENTRY,
     };
 
     const ulp_insn_t program[] = {
-        // First receive: sync buffer to ensure we're aligned with Linky frame
-        I_MOVO(R1, ulp_rx_buffer),
-        M_RETURN(LBL_RX_INIT, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Main loop: ping-pong between two frame buffers
+        M_LABEL(LBL_LOOP),
 
-        // Main loop: continuously receive into 10 ring buffers
-        M_LABEL(LBL_MAIN_LOOP),
-
-        I_MOVO(R1, ulp_rx_line1),
-        M_RETURN(LBL_RX_LINE1, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line2),
-        M_RETURN(LBL_RX_LINE2, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line3),
-        M_RETURN(LBL_RX_LINE3, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line4),
-        M_RETURN(LBL_RX_LINE4, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line5),
-        M_RETURN(LBL_RX_LINE5, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line6),
-        M_RETURN(LBL_RX_LINE6, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line7),
-        M_RETURN(LBL_RX_LINE7, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line8),
-        M_RETURN(LBL_RX_LINE8, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line9),
-        M_RETURN(LBL_RX_LINE9, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line10),
-        M_RETURN(LBL_RX_LINE10, R3, LBL_SUBROUTINE_RX_ENTRY),
-
-        // Wake main CPU after receiving 10 lines
+        // Receive frame into buffer 0
+        I_MOVO(R1, ulp_frame_buf_0),
+        M_RETURN(LBL_RX_0, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Signal CPU: read buffer 0
+        I_MOVO(R0, ulp_active_buf),
+        I_MOVI(R1, 0),
+        I_ST(R1, R0, 0),
         I_WAKE(),
 
-        // Loop back to receive next 10 lines
-        M_BX(LBL_MAIN_LOOP),
+        // Receive frame into buffer 1
+        I_MOVO(R1, ulp_frame_buf_1),
+        M_RETURN(LBL_RX_1, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Signal CPU: read buffer 1
+        I_MOVO(R0, ulp_active_buf),
+        I_MOVI(R1, 1),
+        I_ST(R1, R0, 0),
+        I_WAKE(),
 
-        // UART RX subroutine - 7E1 format for Linky - LF as termination character
-        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, '\n'),
+        M_BX(LBL_LOOP),
+
+        // UART RX subroutine - 7E1 format for Linky - ETX (0x03) as termination
+        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, 0x03),
     };
 
     // Configure GPIO for RX (input with pullup)
@@ -360,45 +333,38 @@ void get_linky_data(linky_data_t *data)
     if (!data) return;
     memset(data, 0, sizeof(linky_data_t));
 
-    // Array of line buffers
-    ulp_var_t* ulp_rx_lines[10] = {
-        ulp_rx_line1,
-        ulp_rx_line2,
-        ulp_rx_line3,
-        ulp_rx_line4,
-        ulp_rx_line5,
-        ulp_rx_line6,
-        ulp_rx_line7,
-        ulp_rx_line8,
-        ulp_rx_line9,
-        ulp_rx_line10
-    };
+    // Read the buffer the ULP says is ready (ping-pong)
+    ulp_var_t *buf = (ulp_active_buf.val & 1) ? ulp_frame_buf_1 : ulp_frame_buf_0;
 
-    // Get received message for processing
-    for(int i = 0 ; i < 10; i++) {
+    char frame[LINKY_MAX_FRAME_LEN + 1];
+    int len = hulp_uart_string_get(buf, frame, sizeof(frame), false);
 
-        char msg_buffer[LINKY_MAX_MSG_LEN + 1];
-        int len = hulp_uart_string_get(ulp_rx_lines[i], msg_buffer, sizeof(msg_buffer), true);
+    DEBUG_LOG(TAG, "Frame buffer length: %d", len);
 
-        DEBUG_LOG(TAG, "Buffer length: %d", len);
+    if (len < 2 || frame[0] != '\x02') {
+        DEBUG_LOGW(TAG, "No valid frame (len=%d, first=0x%02x)", len, len > 0 ? (unsigned char)frame[0] : 0);
+        return;  // Partial or empty frame — skip
+    }
 
-        if (len > 0) {
 #ifdef CONFIG_LINKEY_DEBUG_LOGS
-            // Dump raw hex
-            ESP_LOG_BUFFER_HEX(TAG, msg_buffer, len);
-
-            // Dump as ASCII (with non-printable shown as '.')
-            for (int i = 0; i < len; i++) {
-                if (i % 32 == 0) {
-                    if (i > 0) printf("\n");
-                    printf("%04d: ", i);
-                }
-                char c = msg_buffer[i];
-                printf("%c", (c >= 32 && c < 127) ? c : '.');
-            }
-            printf("\n");
+    // Dump raw hex
+    ESP_LOG_BUFFER_HEX(TAG, frame, len);
 #endif
-            process_message(msg_buffer, len, data);
+
+    // Extract and process each data group from the frame
+    // Frame format: STX [LF LABEL HT DATA HT CS CR] [LF ...] ...
+    int i = 1;  // Skip STX (0x02)
+    while (i < len) {
+        if (frame[i] == '\n') {
+            i++;  // Skip LF (start of data group)
+            int start = i;
+            // Find next LF or end of frame
+            while (i < len && frame[i] != '\n') i++;
+            if (i > start) {
+                process_message(&frame[start], i - start, data);
+            }
+        } else {
+            i++;
         }
     }
 }
