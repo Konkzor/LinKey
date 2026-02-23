@@ -21,7 +21,7 @@ extern "C" {
  */
 #define LINKY_RX_GPIO       GPIO_NUM_14  /**< GPIO for TIC serial input */
 #define LINKY_BAUD_RATE     1200         /**< TIC baud rate (1200 bps) */
-#define LINKY_MAX_FRAME_LEN   250           /**< Maximum frame set length (TEMPO ≈ 245 bytes) */
+#define LINKY_MAX_FRAME_LEN   300           /**< Maximum frame set length (TEMPO ≈ 275 bytes) */
 /** @} */
 
 /** @name TIC Message Labels
