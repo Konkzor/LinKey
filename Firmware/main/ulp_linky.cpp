@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stddef.h>
 #include <ctype.h>
 #include "esp_log.h"
 
@@ -115,6 +116,43 @@ static int validate_checksum(const char *msg, int msg_len) {
     return (calculated_cs == expected_cs);
 }
 
+// Label descriptor for table-driven parsing
+typedef struct {
+    const char *label;      // TIC label string
+    uint8_t data_len;       // Expected number of digits
+    const char *unit;       // Log unit string
+    uint16_t flag;          // Valid flag bit
+    uint16_t offset;        // offsetof() into linky_data_t
+    uint8_t field_size;     // sizeof field: 2 (uint16_t) or 4 (uint32_t)
+} linky_label_t;
+
+// Helper: offsetof + sizeof a linky_data_t member in one macro
+#define FIELD(member) (uint16_t)offsetof(linky_data_t, member), (uint8_t)sizeof(((linky_data_t *)0)->member)
+
+static const linky_label_t linky_labels[] = {
+    { LABEL_IINST, 3, "A",  LINKY_FLAG_IINST, FIELD(iinst) },
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    { LABEL_HCHC,  9, "Wh", LINKY_FLAG_HCHC,  FIELD(hchc) },
+    { LABEL_HCHP,  9, "Wh", LINKY_FLAG_HCHP,  FIELD(hchp) },
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    { LABEL_EJPHN,  9, "Wh", LINKY_FLAG_EJPHN,  FIELD(ejphn) },
+    { LABEL_EJPHPM, 9, "Wh", LINKY_FLAG_EJPHPM, FIELD(ejphpm) },
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    { LABEL_BBRHCJB, 9, "Wh", LINKY_FLAG_BBRHCJB, FIELD(bbrhcjb) },
+    { LABEL_BBRHPJB, 9, "Wh", LINKY_FLAG_BBRHPJB, FIELD(bbrhpjb) },
+    { LABEL_BBRHCJW, 9, "Wh", LINKY_FLAG_BBRHCJW, FIELD(bbrhcjw) },
+    { LABEL_BBRHPJW, 9, "Wh", LINKY_FLAG_BBRHPJW, FIELD(bbrhpjw) },
+    { LABEL_BBRHCJR, 9, "Wh", LINKY_FLAG_BBRHCJR, FIELD(bbrhcjr) },
+    { LABEL_BBRHPJR, 9, "Wh", LINKY_FLAG_BBRHPJR, FIELD(bbrhpjr) },
+#else // BASE
+    { LABEL_BASE, 9, "Wh", LINKY_FLAG_BASE, FIELD(base) },
+#endif
+    { LABEL_PAPP, 5, "VA", LINKY_FLAG_PAPP, FIELD(papp) },
+    { LABEL_ADPS, 3, "A",  LINKY_FLAG_ADPS, FIELD(adps) },
+};
+
+#define LINKY_LABELS_COUNT (sizeof(linky_labels) / sizeof(linky_labels[0]))
+
 // Process received message
 static void process_message(const char *msg, int len, linky_data_t *data) {
     DEBUG_LOG(TAG, "RX (%d): %s", len, msg);
@@ -125,156 +163,30 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
         return;
     }
 
-    // Parse message: "LABEL DATA CS"
-    // Skip leading whitespace
+    // Skip leading separator
     while (*msg == LINKY_TIC_GROUP_SEP) msg++;
 
-    // Check label and extract data
-    int len_parsed = 0;
-    if (str_starts_with(msg, LABEL_IINST)) {
-        msg += strlen(LABEL_IINST);
+    // Match against known labels
+    for (int i = 0; i < (int)LINKY_LABELS_COUNT; i++) {
+        const linky_label_t *lbl = &linky_labels[i];
+        if (!str_starts_with(msg, lbl->label)) continue;
+
+        msg += strlen(lbl->label);
         while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint16_t iinst_temp = (uint16_t)parse_uint(msg, &len_parsed);
-        if(len_parsed == 3){
-            DEBUG_LOG(TAG, "IINST: %d A", iinst_temp);
-            data->iinst = iinst_temp;
-            data->valid_flags |= LINKY_FLAG_IINST;
-        }
-    }
-#if defined(CONFIG_LINKEY_TARIFF_HPHC)
-    else if (str_starts_with(msg, LABEL_HCHC)) {
-        msg += strlen(LABEL_HCHC);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
+
+        int len_parsed = 0;
         uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "HCHC: %lu Wh", val);
-            data->hchc = val;
-            data->valid_flags |= LINKY_FLAG_HCHC;
+        if (len_parsed != lbl->data_len) return;
+
+        DEBUG_LOG(TAG, "%s: %lu %s", lbl->label, val, lbl->unit);
+
+        if (lbl->field_size == 2) {
+            *(uint16_t *)((char *)data + lbl->offset) = (uint16_t)val;
+        } else {
+            *(uint32_t *)((char *)data + lbl->offset) = val;
         }
-    }
-    else if (str_starts_with(msg, LABEL_HCHP)) {
-        msg += strlen(LABEL_HCHP);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "HCHP: %lu Wh", val);
-            data->hchp = val;
-            data->valid_flags |= LINKY_FLAG_HCHP;
-        }
-    }
-#elif defined(CONFIG_LINKEY_TARIFF_EJP)
-    else if (str_starts_with(msg, LABEL_EJPHN)) {
-        msg += strlen(LABEL_EJPHN);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "EJPHN: %lu Wh", val);
-            data->ejphn = val;
-            data->valid_flags |= LINKY_FLAG_EJPHN;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_EJPHPM)) {
-        msg += strlen(LABEL_EJPHPM);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "EJPHPM: %lu Wh", val);
-            data->ejphpm = val;
-            data->valid_flags |= LINKY_FLAG_EJPHPM;
-        }
-    }
-#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
-    else if (str_starts_with(msg, LABEL_BBRHCJB)) {
-        msg += strlen(LABEL_BBRHCJB);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHCJB: %lu Wh", val);
-            data->bbrhcjb = val;
-            data->valid_flags |= LINKY_FLAG_BBRHCJB;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_BBRHPJB)) {
-        msg += strlen(LABEL_BBRHPJB);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHPJB: %lu Wh", val);
-            data->bbrhpjb = val;
-            data->valid_flags |= LINKY_FLAG_BBRHPJB;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_BBRHCJW)) {
-        msg += strlen(LABEL_BBRHCJW);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHCJW: %lu Wh", val);
-            data->bbrhcjw = val;
-            data->valid_flags |= LINKY_FLAG_BBRHCJW;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_BBRHPJW)) {
-        msg += strlen(LABEL_BBRHPJW);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHPJW: %lu Wh", val);
-            data->bbrhpjw = val;
-            data->valid_flags |= LINKY_FLAG_BBRHPJW;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_BBRHCJR)) {
-        msg += strlen(LABEL_BBRHCJR);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHCJR: %lu Wh", val);
-            data->bbrhcjr = val;
-            data->valid_flags |= LINKY_FLAG_BBRHCJR;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_BBRHPJR)) {
-        msg += strlen(LABEL_BBRHPJR);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BBRHPJR: %lu Wh", val);
-            data->bbrhpjr = val;
-            data->valid_flags |= LINKY_FLAG_BBRHPJR;
-        }
-    }
-#else // BASE
-    else if (str_starts_with(msg, LABEL_BASE)) {
-        msg += strlen(LABEL_BASE);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t base_temp = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){
-            DEBUG_LOG(TAG, "BASE: %lu Wh", base_temp);
-            data->base = base_temp;
-            data->valid_flags |= LINKY_FLAG_BASE;
-        }
-    }
-#endif
-    else if (str_starts_with(msg, LABEL_PAPP)) {
-        msg += strlen(LABEL_PAPP);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint32_t papp_temp = parse_uint(msg, &len_parsed);
-        if(len_parsed == 5){
-            DEBUG_LOG(TAG, "PAPP: %lu VA", papp_temp);
-            data->papp = papp_temp;
-            data->valid_flags |= LINKY_FLAG_PAPP;
-        }
-    }
-    else if (str_starts_with(msg, LABEL_ADPS)) {
-        msg += strlen(LABEL_ADPS);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-        uint16_t adps_temp = (uint16_t)parse_uint(msg, &len_parsed);
-        if(len_parsed == 3){
-            DEBUG_LOGW(TAG, "ADPS: %d A (overcurrent!)", adps_temp);
-            data->adps = adps_temp;
-            data->valid_flags |= LINKY_FLAG_ADPS;
-        }
+        data->valid_flags |= lbl->flag;
+        return;
     }
 }
 
