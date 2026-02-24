@@ -59,7 +59,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 {
     const char *mac = get_device_mac_str();
     char topic[128];
-    char payload[1600];
+    char payload[4096];
     int offset = 0;
 
     // Device discovery topic
@@ -103,7 +103,131 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "},",
         mac);
 
-    // BASE sensor (energy) - cumulative meter, only increases
+    // Energy index sensors (tariff-dependent)
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"hchc\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Off-Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.hchc }}\","
+            "\"uniq_id\":\"linkey_%s_hchc\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"hchp\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.hchp }}\","
+            "\"uniq_id\":\"linkey_%s_hchp\""
+        "},",
+        mac);
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"ejphn\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Normal Hours Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.ejphn }}\","
+            "\"uniq_id\":\"linkey_%s_ejphn\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"ejphpm\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Mobile Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.ejphpm }}\","
+            "\"uniq_id\":\"linkey_%s_ejphpm\""
+        "},",
+        mac);
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhcjb\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Blue Off-Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjb }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhcjb\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhpjb\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Blue Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjb }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhpjb\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhcjw\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"White Off-Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjw }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhcjw\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhpjw\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"White Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjw }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhpjw\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhcjr\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Red Off-Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjr }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhcjr\""
+        "},",
+        mac);
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
+        "\"bbrhpjr\":{"
+            "\"p\":\"sensor\","
+            "\"name\":\"Red Peak Energy\","
+            "\"dev_cla\":\"energy\","
+            "\"unit_of_meas\":\"Wh\","
+            "\"stat_cla\":\"total_increasing\","
+            "\"ic\":\"mdi:counter\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjr }}\","
+            "\"uniq_id\":\"linkey_%s_bbrhpjr\""
+        "},",
+        mac);
+#else // BASE
     offset += snprintf(payload + offset, sizeof(payload) - offset,
         "\"base\":{"
             "\"p\":\"sensor\","
@@ -116,6 +240,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"uniq_id\":\"linkey_%s_base\""
         "},",
         mac);
+#endif
 
     // VCAP sensor (voltage) - instantaneous measurement
     offset += snprintf(payload + offset, sizeof(payload) - offset,
@@ -174,11 +299,13 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         mac);
 
     // Shared state and availability topics
-    snprintf(payload + offset, sizeof(payload) - offset,
+    offset += snprintf(payload + offset, sizeof(payload) - offset,
         "\"stat_t\":\"%s\","
         "\"avty_t\":\"%s\""
         "}",
         MQTT_TOPIC_STATE, MQTT_TOPIC_STATUS);
+
+    DEBUG_LOG(TAG, "HA discovery payload size: %d bytes", offset);
 
     // Publish with retain flag so HA remembers the config
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
@@ -216,7 +343,6 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             break;
         case MQTT_EVENT_DELETED:
             DEBUG_LOGW(TAG, "MQTT message expired");
-            state->connected = false;
             break;
         default:
             break;
@@ -242,8 +368,8 @@ void mqtt_init(mqtt_state_t *state)
         },
         .network.timeout_ms = 1500,  // Must exceed WiFi modem sleep interval (~1s with listen_interval=10)
         .network.refresh_connection_after_ms = 0,
-        .buffer.size = 1536,
-        .buffer.out_size = 1536,
+        .buffer.size = 4096,
+        .buffer.out_size = 4096,
     };
 
     if (strlen(MQTT_USERNAME) > 0) {
@@ -329,7 +455,7 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
         return false;
     }
 
-    char payload[128];
+    char payload[256];
     int offset = 0;
     bool first = true;
 
@@ -343,13 +469,95 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
         first = false;
     }
 
-    // Add BASE if valid
-    if (data->valid_flags & LINKY_FLAG_BASE) {
+    // Add energy index fields only on change (tariff-dependent)
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    static uint32_t last_hchc = 0, last_hchp = 0;
+    if ((data->valid_flags & LINKY_FLAG_HCHC) && data->hchc != last_hchc) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"hchc\":%lu", data->hchc);
+        last_hchc = data->hchc;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_HCHP) && data->hchp != last_hchp) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"hchp\":%lu", data->hchp);
+        last_hchp = data->hchp;
+        first = false;
+    }
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    static uint32_t last_ejphn = 0, last_ejphpm = 0;
+    if ((data->valid_flags & LINKY_FLAG_EJPHN) && data->ejphn != last_ejphn) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"ejphn\":%lu", data->ejphn);
+        last_ejphn = data->ejphn;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_EJPHPM) && data->ejphpm != last_ejphpm) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"ejphpm\":%lu", data->ejphpm);
+        last_ejphpm = data->ejphpm;
+        first = false;
+    }
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    static uint32_t last_bbrhcjb = 0, last_bbrhpjb = 0;
+    static uint32_t last_bbrhcjw = 0, last_bbrhpjw = 0;
+    static uint32_t last_bbrhcjr = 0, last_bbrhpjr = 0;
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJB) && data->bbrhcjb != last_bbrhcjb) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhcjb\":%lu", data->bbrhcjb);
+        last_bbrhcjb = data->bbrhcjb;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJB) && data->bbrhpjb != last_bbrhpjb) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhpjb\":%lu", data->bbrhpjb);
+        last_bbrhpjb = data->bbrhpjb;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJW) && data->bbrhcjw != last_bbrhcjw) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhcjw\":%lu", data->bbrhcjw);
+        last_bbrhcjw = data->bbrhcjw;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJW) && data->bbrhpjw != last_bbrhpjw) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhpjw\":%lu", data->bbrhpjw);
+        last_bbrhpjw = data->bbrhpjw;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_BBRHCJR) && data->bbrhcjr != last_bbrhcjr) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhcjr\":%lu", data->bbrhcjr);
+        last_bbrhcjr = data->bbrhcjr;
+        first = false;
+    }
+    if ((data->valid_flags & LINKY_FLAG_BBRHPJR) && data->bbrhpjr != last_bbrhpjr) {
+        if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
+        offset += snprintf(payload + offset, sizeof(payload) - offset,
+                          "\"bbrhpjr\":%lu", data->bbrhpjr);
+        last_bbrhpjr = data->bbrhpjr;
+        first = false;
+    }
+#else // BASE
+    static uint32_t last_base = 0;
+    if ((data->valid_flags & LINKY_FLAG_BASE) && data->base != last_base) {
         if (!first) offset += snprintf(payload + offset, sizeof(payload) - offset, ",");
         offset += snprintf(payload + offset, sizeof(payload) - offset,
                           "\"base\":%lu", data->base);
+        last_base = data->base;
         first = false;
     }
+#endif
 
     // Add PAPP if valid
     if (data->valid_flags & LINKY_FLAG_PAPP) {

@@ -46,7 +46,17 @@ static const char *TAG = "LINKY_MAIN";
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
 #define MQTT_CONNECT_TIMEOUT_MS 1000    // MQTT connection timeout
-#define ULP_DATA_TIMEOUT_MS     500     // Timeout waiting for ULP data
+// Timeout waiting for ULP data: frame-level reception needs at least 2 frame periods
+// (partial frame + first complete frame) before valid data is available
+#if defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define ULP_DATA_TIMEOUT_MS     5000
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define ULP_DATA_TIMEOUT_MS     4000
+#elif defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define ULP_DATA_TIMEOUT_MS     3500
+#else
+#define ULP_DATA_TIMEOUT_MS     3000
+#endif
 #define POLL_INTERVAL_MS        100     // Polling interval in connect/wait loops
 
 // FSM States
@@ -79,6 +89,17 @@ static mqtt_state_t mqtt_state = {0};
 
 // ULP initialization flag (one-time init)
 static bool ulp_initialized = false;
+
+// Task handle for ULP wake notification
+static TaskHandle_t main_task_handle;
+
+// ULP wake ISR: notify main task when a new frame is received
+static void IRAM_ATTR ulp_isr(void *arg)
+{
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(*(TaskHandle_t *)arg, &woken);
+    portYIELD_FROM_ISR(woken);
+}
 
 static void rgb_led_init(void)
 {
@@ -125,24 +146,23 @@ static void stop_all_connections(void)
 // Wait for ULP data to be received (with voltage checks)
 static conn_result_t ulp_wait_data(void)
 {
-    uint32_t wait_ms = 0;
     linky_data_t data;
-    while (wait_ms < ULP_DATA_TIMEOUT_MS) {
-        // Check voltage
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(ULP_DATA_TIMEOUT_MS);
+
+    while (xTaskGetTickCount() < deadline) {
+        // Block until ULP notification or periodic check interval
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(POLL_INTERVAL_MS));
+
         if (voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV)) {
             return CONN_VOLTAGE_LOW;
         }
-            // Check if WiFi is still connected
         if (!wifi_is_connected() || !mqtt_is_connected(&mqtt_state)) {
             return CONN_WIFI_LOST;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
-        wait_ms += POLL_INTERVAL_MS;
-
         get_linky_data(&data);
         if (data.valid_flags != 0) {
-            DEBUG_LOG(TAG, "ULP data received - IINST: %u, BASE: %lu", data.iinst, data.base);
+            DEBUG_LOG(TAG, "ULP data received (flags: 0x%04x)", data.valid_flags);
             return CONN_OK;
         }
     }
@@ -281,9 +301,12 @@ static app_state_t handle_state_mqtt_connect(void)
 // STATE_WAIT_ULP_DATA: Initialize ULP (once) and wait for data
 static app_state_t handle_state_wait_ulp_data(void)
 {
-    // One-time ULP initialization
+    // One-time ULP initialization + ISR registration
     if (!ulp_initialized) {
         DEBUG_LOG(TAG, "Initializing ULP...");
+        main_task_handle = xTaskGetCurrentTaskHandle();
+        hulp_ulp_isr_register(&ulp_isr, &main_task_handle);
+        hulp_ulp_interrupt_en();
         init_ulp_linky();
         ulp_initialized = true;
     }
@@ -349,8 +372,8 @@ static app_state_t handle_state_publish_data(void)
         return STATE_WAIT_ULP_DATA;
     }
 
-    DEBUG_LOG(TAG, "Linky data - IINST: %u A, BASE: %lu Wh",
-            linky_data.iinst, linky_data.base);
+    DEBUG_LOG(TAG, "Linky data received (flags: 0x%04x, IINST: %u A)",
+            linky_data.valid_flags, linky_data.iinst);
 
     // Publish data
     if (!mqtt_publish_linky_data(&mqtt_state, &linky_data)) {
@@ -416,9 +439,15 @@ void app_main(void)
                 break;
         }
 
-        // Sleep for ~1s (auto light sleep will activate) - skip in INIT state
-        if (current_state != STATE_INIT) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
+        // Wait for next event based on current state
+        switch (current_state) {
+            case STATE_PUBLISH_DATA:
+                // Block until ULP signals a new frame is ready
+                ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(ULP_DATA_TIMEOUT_MS));
+                break;
+            default:
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                break;
         }
     }
 }
