@@ -19,9 +19,14 @@ extern "C" {
 /** @name Linky TIC Configuration
  * @{
  */
-#define LINKY_RX_GPIO       GPIO_NUM_14  /**< GPIO for TIC serial input */
-#define LINKY_BAUD_RATE     1200         /**< TIC baud rate (1200 bps) */
-#define LINKY_MAX_FRAME_LEN   300           /**< Maximum frame set length (TEMPO ≈ 275 bytes) */
+#define LINKY_RX_GPIO         GPIO_NUM_14  /**< GPIO for TIC serial input */
+#define LINKY_BAUD_RATE       1200         /**< TIC baud rate (1200 bps) */
+#define LINKY_MAX_FRAME_LEN   300          /**< Maximum frame set length (TEMPO ≈ 275 bytes) */
+#define LINKY_TIC_FRAME_START     0x02         /**< STX - Start of TIC frame */
+#define LINKY_TIC_FRAME_END       0x03         /**< ETX - End of TIC frame */
+#define LINKY_TIC_GROUP_START     0x0A         /**< LF - Start of data group */
+#define LINKY_TIC_GROUP_END       0x0D         /**< CR - End of data group */
+#define LINKY_TIC_GROUP_SEP       0x20         /**< SP - Separator between label/data/checksum (historique mode) */
 /** @} */
 
 /** @name TIC Message Labels

@@ -94,9 +94,9 @@ static uint32_t parse_uint(const char *str, int *len) {
 static int validate_checksum(const char *msg, int msg_len) {
     if (msg_len < 5) return 0; // Too short
 
-    // Find checksum (last char before \r or \n)
+    // Find checksum (last char before group end/start delimiters)
     int cs_pos = msg_len - 1;
-    while (cs_pos > 0 && (msg[cs_pos] == '\r' || msg[cs_pos] == '\n')) {
+    while (cs_pos > 0 && (msg[cs_pos] == LINKY_TIC_GROUP_END || msg[cs_pos] == LINKY_TIC_GROUP_START)) {
         cs_pos--;
     }
 
@@ -127,13 +127,13 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 
     // Parse message: "LABEL DATA CS"
     // Skip leading whitespace
-    while (*msg && isspace((unsigned char)*msg)) msg++;
+    while (*msg == LINKY_TIC_GROUP_SEP) msg++;
 
     // Check label and extract data
     int len_parsed = 0;
     if (str_starts_with(msg, LABEL_IINST)) {
         msg += strlen(LABEL_IINST);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint16_t iinst_temp = (uint16_t)parse_uint(msg, &len_parsed);
         if(len_parsed == 3){
             DEBUG_LOG(TAG, "IINST: %d A", iinst_temp);
@@ -144,7 +144,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 #if defined(CONFIG_LINKEY_TARIFF_HPHC)
     else if (str_starts_with(msg, LABEL_HCHC)) {
         msg += strlen(LABEL_HCHC);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "HCHC: %lu Wh", val);
@@ -154,7 +154,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_HCHP)) {
         msg += strlen(LABEL_HCHP);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "HCHP: %lu Wh", val);
@@ -165,7 +165,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 #elif defined(CONFIG_LINKEY_TARIFF_EJP)
     else if (str_starts_with(msg, LABEL_EJPHN)) {
         msg += strlen(LABEL_EJPHN);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "EJPHN: %lu Wh", val);
@@ -175,7 +175,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_EJPHPM)) {
         msg += strlen(LABEL_EJPHPM);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "EJPHPM: %lu Wh", val);
@@ -186,7 +186,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 #elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
     else if (str_starts_with(msg, LABEL_BBRHCJB)) {
         msg += strlen(LABEL_BBRHCJB);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHCJB: %lu Wh", val);
@@ -196,7 +196,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_BBRHPJB)) {
         msg += strlen(LABEL_BBRHPJB);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHPJB: %lu Wh", val);
@@ -206,7 +206,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_BBRHCJW)) {
         msg += strlen(LABEL_BBRHCJW);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHCJW: %lu Wh", val);
@@ -216,7 +216,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_BBRHPJW)) {
         msg += strlen(LABEL_BBRHPJW);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHPJW: %lu Wh", val);
@@ -226,7 +226,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_BBRHCJR)) {
         msg += strlen(LABEL_BBRHCJR);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHCJR: %lu Wh", val);
@@ -236,7 +236,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_BBRHPJR)) {
         msg += strlen(LABEL_BBRHPJR);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t val = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BBRHPJR: %lu Wh", val);
@@ -247,7 +247,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 #else // BASE
     else if (str_starts_with(msg, LABEL_BASE)) {
         msg += strlen(LABEL_BASE);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t base_temp = parse_uint(msg, &len_parsed);
         if(len_parsed == 9){
             DEBUG_LOG(TAG, "BASE: %lu Wh", base_temp);
@@ -258,7 +258,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
 #endif
     else if (str_starts_with(msg, LABEL_PAPP)) {
         msg += strlen(LABEL_PAPP);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint32_t papp_temp = parse_uint(msg, &len_parsed);
         if(len_parsed == 5){
             DEBUG_LOG(TAG, "PAPP: %lu VA", papp_temp);
@@ -268,7 +268,7 @@ static void process_message(const char *msg, int len, linky_data_t *data) {
     }
     else if (str_starts_with(msg, LABEL_ADPS)) {
         msg += strlen(LABEL_ADPS);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
         uint16_t adps_temp = (uint16_t)parse_uint(msg, &len_parsed);
         if(len_parsed == 3){
             DEBUG_LOGW(TAG, "ADPS: %d A (overcurrent!)", adps_temp);
@@ -315,7 +315,7 @@ void init_ulp_linky(void)
         M_BX(LBL_LOOP),
 
         // UART RX subroutine - 7E1 format for Linky - ETX (0x03) as termination
-        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, 0x03, LINKY_MAX_FRAME_LEN),
+        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, LINKY_TIC_FRAME_END, LINKY_MAX_FRAME_LEN),
     };
 
     // Configure GPIO for RX (input with pullup)
@@ -354,7 +354,7 @@ void get_linky_data(linky_data_t *data)
 
     DEBUG_LOG(TAG, "Frame buffer length: %d", len);
 
-    if (len < 2 || frame[0] != '\x02') {
+    if (len < 2 || frame[0] != LINKY_TIC_FRAME_START) {
         DEBUG_LOGW(TAG, "No valid frame (len=%d, first=0x%02x)", len, len > 0 ? (unsigned char)frame[0] : 0);
         return;  // Partial or empty frame — skip
     }
@@ -368,11 +368,11 @@ void get_linky_data(linky_data_t *data)
     // Frame format: STX [LF LABEL HT DATA HT CS CR] [LF ...] ...
     int i = 1;  // Skip STX (0x02)
     while (i < len) {
-        if (frame[i] == '\n') {
+        if (frame[i] == LINKY_TIC_GROUP_START) {
             i++;  // Skip LF (start of data group)
             int start = i;
             // Find next LF or end of frame
-            while (i < len && frame[i] != '\n') i++;
+            while (i < len && frame[i] != LINKY_TIC_GROUP_START) i++;
             if (i > start) {
                 process_message(&frame[start], i - start, data);
             }
