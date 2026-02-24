@@ -1,3 +1,11 @@
+/**
+ * @file ulp_linky.h
+ * @brief ULP-based Linky TIC protocol decoder
+ *
+ * Implements 7E1 UART reception on the ULP coprocessor for low-power
+ * monitoring of French Linky smart meter TIC (Teleinformation Client) data.
+ */
+
 #ifndef ULP_LINKY_H
 #define ULP_LINKY_H
 
@@ -8,39 +16,128 @@
 extern "C" {
 #endif
 
-// Linky TIC configuration
-#define LINKY_RX_GPIO       GPIO_NUM_36
-#define LINKY_BAUD_RATE     1200
-#define LINKY_MAX_MSG_LEN   32 
+/** @name Linky TIC Configuration
+ * @{
+ */
+#define LINKY_RX_GPIO         GPIO_NUM_14  /**< GPIO for TIC serial input */
+#define LINKY_BAUD_RATE       1200         /**< TIC baud rate (1200 bps) */
+#define LINKY_MAX_FRAME_LEN   300          /**< Maximum frame set length (TEMPO ≈ 275 bytes) */
+#define LINKY_TIC_FRAME_START     0x02         /**< STX - Start of TIC frame */
+#define LINKY_TIC_FRAME_END       0x03         /**< ETX - End of TIC frame */
+#define LINKY_TIC_GROUP_START     0x0A         /**< LF - Start of data group */
+#define LINKY_TIC_GROUP_END       0x0D         /**< CR - End of data group */
+#define LINKY_TIC_GROUP_SEP       0x20         /**< SP - Separator between label/data/checksum (historique mode) */
+/** @} */
 
-// Message labels we're interested in
-#define LABEL_IINST         "IINST"
-#define LABEL_BASE          "BASE"
+/** @name TIC Message Labels
+ * @{
+ */
+#define LABEL_IINST         "IINST"      /**< Instantaneous current label */
+#define LABEL_PAPP          "PAPP"       /**< Apparent power label */
+#define LABEL_ADPS          "ADPS"       /**< Overcurrent warning label */
 
-// Structure to hold decoded Linky data
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define LABEL_HCHC          "HCHC"       /**< Off-peak energy index label */
+#define LABEL_HCHP          "HCHP"       /**< Peak energy index label */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define LABEL_EJPHN         "EJPHN"      /**< Normal hours energy index label */
+#define LABEL_EJPHPM        "EJPHPM"     /**< Mobile peak energy index label */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define LABEL_BBRHCJB       "BBRHCJB"    /**< Blue off-peak energy index label */
+#define LABEL_BBRHPJB       "BBRHPJB"    /**< Blue peak energy index label */
+#define LABEL_BBRHCJW       "BBRHCJW"    /**< White off-peak energy index label */
+#define LABEL_BBRHPJW       "BBRHPJW"    /**< White peak energy index label */
+#define LABEL_BBRHCJR       "BBRHCJR"    /**< Red off-peak energy index label */
+#define LABEL_BBRHPJR       "BBRHPJR"    /**< Red peak energy index label */
+#else // BASE (default)
+#define LABEL_BASE          "BASE"       /**< Base energy index label */
+#endif
+/** @} */
+
+/** @name Valid Flags for linky_data_t
+ * @{
+ */
+#define LINKY_FLAG_IINST    0x01         /**< IINST value is valid */
+#define LINKY_FLAG_PAPP     0x04         /**< PAPP value is valid */
+#define LINKY_FLAG_ADPS     0x08         /**< ADPS value is valid */
+
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+#define LINKY_FLAG_HCHC     0x02         /**< HCHC value is valid */
+#define LINKY_FLAG_HCHP     0x10         /**< HCHP value is valid */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+#define LINKY_FLAG_EJPHN    0x02         /**< EJPHN value is valid */
+#define LINKY_FLAG_EJPHPM   0x10         /**< EJPHPM value is valid */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+#define LINKY_FLAG_BBRHCJB  0x02         /**< BBRHCJB value is valid */
+#define LINKY_FLAG_BBRHPJB  0x10         /**< BBRHPJB value is valid */
+#define LINKY_FLAG_BBRHCJW  0x20         /**< BBRHCJW value is valid */
+#define LINKY_FLAG_BBRHPJW  0x40         /**< BBRHPJW value is valid */
+#define LINKY_FLAG_BBRHCJR  0x80         /**< BBRHCJR value is valid */
+#define LINKY_FLAG_BBRHPJR  0x100        /**< BBRHPJR value is valid */
+#else // BASE
+#define LINKY_FLAG_BASE     0x02         /**< BASE value is valid */
+#endif
+/** @} */
+
+/**
+ * @brief Decoded Linky TIC data
+ */
 typedef struct {
-    uint16_t iinst;         // Instantaneous current (A)
-    uint32_t base;          // Energy index (Wh)
-    uint16_t valid_flags;   // Bit flags: bit0=iinst, bit1=base
+    uint16_t iinst;        /**< Instantaneous current (A) */
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    uint32_t hchc;         /**< Off-peak energy index (Wh) */
+    uint32_t hchp;         /**< Peak energy index (Wh) */
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    uint32_t ejphn;        /**< Normal hours energy index (Wh) */
+    uint32_t ejphpm;       /**< Mobile peak energy index (Wh) */
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    uint32_t bbrhcjb;      /**< Blue off-peak energy index (Wh) */
+    uint32_t bbrhpjb;      /**< Blue peak energy index (Wh) */
+    uint32_t bbrhcjw;      /**< White off-peak energy index (Wh) */
+    uint32_t bbrhpjw;      /**< White peak energy index (Wh) */
+    uint32_t bbrhcjr;      /**< Red off-peak energy index (Wh) */
+    uint32_t bbrhpjr;      /**< Red peak energy index (Wh) */
+#else // BASE
+    uint32_t base;         /**< Energy index (Wh) */
+#endif
+    uint32_t papp;         /**< Apparent power (VA) */
+    uint16_t adps;         /**< Overcurrent warning current (A) */
+    uint16_t valid_flags;  /**< Validity flags (LINKY_FLAG_*) */
+    uint32_t voltage_cap;  /**< Supercap voltage (mV), filled by caller */
+    uint32_t uptime_s;     /**< Device uptime (seconds), filled by caller */
 } linky_data_t;
 
-// RTC data shared between ULP and main CPU
-extern ulp_var_t ulp_rx_buffer[];
-extern ulp_var_t ulp_rx_line1[];
-extern ulp_var_t ulp_rx_line2[];
-extern ulp_var_t ulp_rx_line3[];
-extern ulp_var_t ulp_rx_line4[];
-extern ulp_var_t ulp_rx_line5[];
-extern ulp_var_t ulp_rx_line6[];
-extern ulp_var_t ulp_rx_line7[];
-extern ulp_var_t ulp_rx_line8[];
-extern ulp_var_t ulp_rx_line9[];
-extern ulp_var_t ulp_rx_line10[];
+/** @name ULP RTC Buffers
+ * @brief Double-buffered frame buffers in RTC slow memory (ping-pong)
+ *
+ * ULP alternates between buf_0 and buf_1, receiving full TIC frame sets
+ * (terminated by ETX 0x03). After each frame, ulp_active_buf indicates
+ * which buffer the CPU should read (the one just completed).
+ * @{
+ */
+extern ulp_var_t ulp_frame_buf_0[];
+extern ulp_var_t ulp_frame_buf_1[];
+extern ulp_var_t ulp_active_buf;
+/** @} */
 
-// Function to initialize and start ULP
+/**
+ * @brief Initialize and start ULP Linky decoder
+ *
+ * Loads ULP program implementing 7E1 UART RX at 1200 baud.
+ * ULP continuously receives TIC frame sets (ETX-terminated) into
+ * double-buffered RTC memory. Main CPU polls via get_linky_data().
+ */
 void init_ulp_linky(void);
 
-// Function to get data from ULP
+/**
+ * @brief Get decoded data from ULP frame buffer
+ *
+ * Reads the active frame buffer (indicated by ulp_active_buf),
+ * extracts individual data groups (between LF/CR delimiters),
+ * validates checksums, and parses label values.
+ *
+ * @param[out] data Structure to fill with decoded values (zeroed first)
+ */
 void get_linky_data(linky_data_t *data);
 
 #ifdef __cplusplus

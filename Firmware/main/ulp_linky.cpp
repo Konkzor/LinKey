@@ -1,8 +1,7 @@
 #include <string.h>
+#include <stddef.h>
 #include <ctype.h>
 #include "esp_log.h"
-#include "driver/rtc_io.h"
-#include "soc/rtc.h"
 
 extern "C" {
 #include "hulp.h"
@@ -15,16 +14,17 @@ extern "C" {
 static const char *TAG = "ULP_LINKY";
 
 // Custom UART RX macro for 7E1 (7 data bits, Even parity, 1 stop bit)
-// Based on HULP's M_INCLUDE_UART_RX - MINIMAL changes from original
-#define M_INCLUDE_UART_RX_7E1(label_entry, baud_rate, rx_gpio, reg_string_ptr, reg_scr, reg_return, termination_char) \
+// Based on HULP's M_INCLUDE_UART_RX - modified for 7E1 and 16-bit length.
+// Uses hardcoded buffer_capacity instead of 8-bit metadata field, allowing >255 byte buffers.
+// Metadata word stores only the received length (full 16 bits).
+#define M_INCLUDE_UART_RX_7E1(label_entry, baud_rate, rx_gpio, reg_string_ptr, reg_scr, reg_return, termination_char, buffer_capacity) \
     M_LABEL(label_entry), \
         M_MOVL(R0,label_entry),                         /*Need all the registers we can get for this one, so the return address */  \
-        I_ST(reg_return,R0,40),                         /*  is saved temporarily (offset increased for 7E1 extra instructions)*/                                                  \
+        I_ST(reg_return,R0,36),                         /*  is saved temporarily (offset 36 = subroutine size) */                   \
         I_MOVI(reg_scr,0),                              /*reg_scr is used to count received bytes*/                                 \
-        I_LD(R0,reg_string_ptr,0),                      /*Begin loop for each byte: Load the metadata*/                             \
-        I_RSHI(R0,R0,8),                                /*  Isolate the buffer size from it*/                                       \
-        I_SUBR(R0,R0,reg_scr),                          /*  Then compare buffer size with current length to check if full*/         \
-        I_BL(23, 1),                                    /* CHANGED: 23 instead of 21 (added 2 instructions: delay + read parity) */ \
+        I_MOVI(R0,(buffer_capacity)),                   /*Begin loop for each byte: load capacity as immediate (16-bit) */          \
+        I_SUBR(R0,R0,reg_scr),                          /*  Compare buffer capacity with current length to check if full*/          \
+        I_BL(23, 1),                                    /*  If full, branch to end (store length + return) */                       \
         I_GPIO_READ(rx_gpio),                           /*Wait here until pin goes low (start bit)*/                                \
         I_BGE(-1,1),                                                                                                                \
         I_STAGE_RST(),                                                                                                              \
@@ -35,43 +35,35 @@ static const char *TAG = "ULP_LINKY";
         I_LSHI(R0,R0,15),                                                                                                           \
         I_ORR(reg_return,reg_return,R0),                                                                                            \
         I_STAGE_INC(1),                                                                                                             \
-        I_JUMPS(-6, 7, JUMPS_LT),                       /* CHANGED: 7 instead of 8 - read 7 data bits */                           \
-        I_RSHI(reg_return,reg_return,1),                /* NEW: Shift once more to align 7 bits to [15:8] like 8-bit */           \
-        I_DELAY((uint16_t)(hulp_get_fast_clk_freq() / (baud_rate) - 34)),  /* NEW: Skip parity bit timing */                     \
+        I_JUMPS(-6, 7, JUMPS_LT),                       /* 7 instead of 8 - read 7 data bits */                                    \
+        I_RSHI(reg_return,reg_return,1),                /* Shift once more to align 7 bits to [15:8] like 8-bit */                  \
+        I_DELAY((uint16_t)(hulp_get_fast_clk_freq() / (baud_rate) - 34)),  /* Skip parity bit timing */                            \
         I_RSHI(R0,reg_scr,1),                           /*Store the byte. ulpstring =one word metadata, then 2 chars in every */    \
         I_ADDR(R0,reg_string_ptr,R0),                   /*  word thereafter, so offset = 1+length/2 (ie. length >> 1, */            \
         I_ST(reg_return,R0,1),                          /*  add that to string ptr, then I_ST with 1 offset) */                     \
         I_GPIO_READ(rx_gpio),                           /*Wait here until pin goes high to sync with stop bit*/                     \
         I_BL(-1,1),                                                                                                                 \
-        I_SUBI(R0,reg_return,(termination_char)<<8),    /* 7-bit data now aligned to [15:8] like original */                       \
-        I_BL(3,1<<8),                                   /* Check if upper byte is zero */                 \
-        I_ADDI(reg_scr,reg_scr,1),                      /*  else increment length and loop back to beginning of new byte */         \
-        I_BGE(-25,0),                                   /* CHANGED: -25 instead of -23 (added 2 instructions: delay + read parity) */                 \
-        I_LD(reg_return,reg_string_ptr,0),              /*Load the metadata (termination char / buffer full branches here)*/        \
-        I_ANDI(reg_return,reg_return,0xFF<<8),          /*Update metadata with received length*/                                    \
-        I_ORR(reg_return,reg_return,reg_scr),                                                                                       \
-        I_ST(reg_return,reg_string_ptr,0),              /*  This I_ST also sets updated flag on metadata var */                     \
+        I_SUBI(R0,reg_return,(termination_char)<<8),    /* 7-bit data now aligned to [15:8] like original */                        \
+        I_BL(3,1<<8),                                   /* If termination char found, branch to end */                              \
+        I_ADDI(reg_scr,reg_scr,1),                      /*  else increment length and loop back to capacity check */                \
+        I_BGE(-24,0),                                   /* Back to I_MOVI capacity (-24 instead of -25: 1 fewer instruction) */     \
+        I_ST(reg_scr,reg_string_ptr,0),                 /*Store received length as full 16-bit value in metadata word */            \
         M_MOVL(reg_return,label_entry),                 /*Now need to load the return address saved at the beginning, and return */ \
-        I_LD(reg_return,reg_return,40),                                                                                             \
+        I_LD(reg_return,reg_return,36),                                                                                             \
         I_BXR(reg_return),                                                                                                          \
         I_HALT()
 
 // Wrapper with default registers like the original
-#define M_INCLUDE_UART_RX_7E1_SIMPLE(label_entry, baud_rate, rx_gpio, termination_char) \
-    M_INCLUDE_UART_RX_7E1(label_entry, baud_rate, rx_gpio, R1, R2, R3, termination_char)
+#define M_INCLUDE_UART_RX_7E1_SIMPLE(label_entry, baud_rate, rx_gpio, termination_char, buffer_capacity) \
+    M_INCLUDE_UART_RX_7E1(label_entry, baud_rate, rx_gpio, R1, R2, R3, termination_char, buffer_capacity)
 
 // RTC_DATA_ATTR variables are stored in RTC slow memory and persist across deep sleep
-RTC_DATA_ATTR ulp_var_t ulp_rx_buffer HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line1 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line2 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line3 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line4 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line5 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line6 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line7 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line8 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line9 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
-RTC_DATA_ATTR ulp_var_t ulp_rx_line10 HULP_UART_STRING_BUFFER(LINKY_MAX_MSG_LEN);
+// Double-buffered frame reception: ULP alternates between buf_0 and buf_1
+// Raw arrays instead of HULP_UART_STRING_BUFFER (which is limited to 255 bytes
+// by its 8-bit metadata fields). Layout: [0]=16-bit length, [1..N]=2 chars per word.
+RTC_DATA_ATTR ulp_var_t ulp_frame_buf_0[1 + (LINKY_MAX_FRAME_LEN / 2)];
+RTC_DATA_ATTR ulp_var_t ulp_frame_buf_1[1 + (LINKY_MAX_FRAME_LEN / 2)];
+RTC_DATA_ATTR ulp_var_t ulp_active_buf;  // 0 or 1: which buffer CPU should read
 
 // Helper to compare strings in ULP context
 // Returns 1 if str1 starts with str2
@@ -98,14 +90,14 @@ static uint32_t parse_uint(const char *str, int *len) {
 }
 
 // Validate Linky checksum
-// Format: "LABEL DATA CS\r\n"
+// Format: "LABEL\tDATA\tCS\r" (data group extracted from TIC frame)
 // Checksum = (sum_of_bytes & 0x3F) + 0x20
 static int validate_checksum(const char *msg, int msg_len) {
     if (msg_len < 5) return 0; // Too short
 
-    // Find checksum (last char before \r or \n)
+    // Find checksum (last char before group end/start delimiters)
     int cs_pos = msg_len - 1;
-    while (cs_pos > 0 && (msg[cs_pos] == '\r' || msg[cs_pos] == '\n')) {
+    while (cs_pos > 0 && (msg[cs_pos] == LINKY_TIC_GROUP_END || msg[cs_pos] == LINKY_TIC_GROUP_START)) {
         cs_pos--;
     }
 
@@ -124,41 +116,77 @@ static int validate_checksum(const char *msg, int msg_len) {
     return (calculated_cs == expected_cs);
 }
 
+// Label descriptor for table-driven parsing
+typedef struct {
+    const char *label;      // TIC label string
+    uint8_t data_len;       // Expected number of digits
+    const char *unit;       // Log unit string
+    uint16_t flag;          // Valid flag bit
+    uint16_t offset;        // offsetof() into linky_data_t
+    uint8_t field_size;     // sizeof field: 2 (uint16_t) or 4 (uint32_t)
+} linky_label_t;
+
+// Helper: offsetof + sizeof a linky_data_t member in one macro
+#define FIELD(member) (uint16_t)offsetof(linky_data_t, member), (uint8_t)sizeof(((linky_data_t *)0)->member)
+
+static const linky_label_t linky_labels[] = {
+    { LABEL_IINST, 3, "A",  LINKY_FLAG_IINST, FIELD(iinst) },
+#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    { LABEL_HCHC,  9, "Wh", LINKY_FLAG_HCHC,  FIELD(hchc) },
+    { LABEL_HCHP,  9, "Wh", LINKY_FLAG_HCHP,  FIELD(hchp) },
+#elif defined(CONFIG_LINKEY_TARIFF_EJP)
+    { LABEL_EJPHN,  9, "Wh", LINKY_FLAG_EJPHN,  FIELD(ejphn) },
+    { LABEL_EJPHPM, 9, "Wh", LINKY_FLAG_EJPHPM, FIELD(ejphpm) },
+#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
+    { LABEL_BBRHCJB, 9, "Wh", LINKY_FLAG_BBRHCJB, FIELD(bbrhcjb) },
+    { LABEL_BBRHPJB, 9, "Wh", LINKY_FLAG_BBRHPJB, FIELD(bbrhpjb) },
+    { LABEL_BBRHCJW, 9, "Wh", LINKY_FLAG_BBRHCJW, FIELD(bbrhcjw) },
+    { LABEL_BBRHPJW, 9, "Wh", LINKY_FLAG_BBRHPJW, FIELD(bbrhpjw) },
+    { LABEL_BBRHCJR, 9, "Wh", LINKY_FLAG_BBRHCJR, FIELD(bbrhcjr) },
+    { LABEL_BBRHPJR, 9, "Wh", LINKY_FLAG_BBRHPJR, FIELD(bbrhpjr) },
+#else // BASE
+    { LABEL_BASE, 9, "Wh", LINKY_FLAG_BASE, FIELD(base) },
+#endif
+    { LABEL_PAPP, 5, "VA", LINKY_FLAG_PAPP, FIELD(papp) },
+    { LABEL_ADPS, 3, "A",  LINKY_FLAG_ADPS, FIELD(adps) },
+};
+
+#define LINKY_LABELS_COUNT (sizeof(linky_labels) / sizeof(linky_labels[0]))
+
 // Process received message
 static void process_message(const char *msg, int len, linky_data_t *data) {
     DEBUG_LOG(TAG, "RX (%d): %s", len, msg);
 
     // Validate checksum first
     if (!validate_checksum(msg, len)) {
-        ESP_LOGW(TAG, "Invalid checksum");
+        DEBUG_LOGW(TAG, "Invalid checksum");
         return;
     }
 
-    // Parse message: "LABEL DATA CS"
-    // Skip leading whitespace
-    while (*msg && isspace((unsigned char)*msg)) msg++;
+    // Skip leading separator
+    while (*msg == LINKY_TIC_GROUP_SEP) msg++;
 
-    // Check label and extract data
-    int len_parsed = 0;
-    if (str_starts_with(msg, LABEL_IINST)) {
-        msg += strlen(LABEL_IINST);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
-        uint16_t iinst_temp = (uint16_t)parse_uint(msg, &len_parsed);
-        if(len_parsed == 3){
-            DEBUG_LOG(TAG, "IINST: %d A", data->iinst);
-            data->iinst = iinst_temp;
-            data->valid_flags |= 0x01;
+    // Match against known labels
+    for (int i = 0; i < (int)LINKY_LABELS_COUNT; i++) {
+        const linky_label_t *lbl = &linky_labels[i];
+        if (!str_starts_with(msg, lbl->label)) continue;
+
+        msg += strlen(lbl->label);
+        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
+
+        int len_parsed = 0;
+        uint32_t val = parse_uint(msg, &len_parsed);
+        if (len_parsed != lbl->data_len) return;
+
+        DEBUG_LOG(TAG, "%s: %lu %s", lbl->label, val, lbl->unit);
+
+        if (lbl->field_size == 2) {
+            *(uint16_t *)((char *)data + lbl->offset) = (uint16_t)val;
+        } else {
+            *(uint32_t *)((char *)data + lbl->offset) = val;
         }
-    }
-    else if (str_starts_with(msg, LABEL_BASE)) {
-        msg += strlen(LABEL_BASE);
-        while (*msg && isspace((unsigned char)*msg)) msg++;
-        uint32_t base_temp = parse_uint(msg, &len_parsed);
-        if(len_parsed == 9){  
-            DEBUG_LOG(TAG, "BASE: %lu Wh", data->base );
-            data->base = base_temp;
-            data->valid_flags |= 0x02;
-        }
+        data->valid_flags |= lbl->flag;
+        return;
     }
 }
 
@@ -166,60 +194,40 @@ void init_ulp_linky(void)
 {
     DEBUG_LOG(TAG, "Initializing ULP for Linky monitoring");
 
-    // Labels for ULP program - follow HULP example pattern
+    // Labels for ULP program
     enum {
-        LBL_RX_INIT,
-        LBL_MAIN_LOOP,
-        LBL_RX_LINE1,
-        LBL_RX_LINE2,
-        LBL_RX_LINE3,
-        LBL_RX_LINE4,
-        LBL_RX_LINE5,
-        LBL_RX_LINE6,
-        LBL_RX_LINE7,
-        LBL_RX_LINE8,
-        LBL_RX_LINE9,
-        LBL_RX_LINE10,
+        LBL_LOOP,
+        LBL_RX_0,
+        LBL_RX_1,
         LBL_SUBROUTINE_RX_ENTRY,
     };
 
     const ulp_insn_t program[] = {
-        // First receive: sync buffer to ensure we're aligned with Linky frame
-        I_MOVO(R1, ulp_rx_buffer),
-        M_RETURN(LBL_RX_INIT, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Main loop: ping-pong between two frame buffers
+        M_LABEL(LBL_LOOP),
 
-        // Main loop: continuously receive into 10 ring buffers
-        M_LABEL(LBL_MAIN_LOOP),
-
-        I_MOVO(R1, ulp_rx_line1),
-        M_RETURN(LBL_RX_LINE1, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line2),
-        M_RETURN(LBL_RX_LINE2, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line3),
-        M_RETURN(LBL_RX_LINE3, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line4),
-        M_RETURN(LBL_RX_LINE4, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line5),
-        M_RETURN(LBL_RX_LINE5, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line6),
-        M_RETURN(LBL_RX_LINE6, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line7),
-        M_RETURN(LBL_RX_LINE7, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line8),
-        M_RETURN(LBL_RX_LINE8, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line9),
-        M_RETURN(LBL_RX_LINE9, R3, LBL_SUBROUTINE_RX_ENTRY),
-        I_MOVO(R1, ulp_rx_line10),
-        M_RETURN(LBL_RX_LINE10, R3, LBL_SUBROUTINE_RX_ENTRY),
-
-        // Wake main CPU after receiving 10 lines
+        // Receive frame into buffer 0
+        I_MOVO(R1, ulp_frame_buf_0),
+        M_RETURN(LBL_RX_0, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Signal CPU: read buffer 0
+        I_MOVO(R0, ulp_active_buf),
+        I_MOVI(R1, 0),
+        I_ST(R1, R0, 0),
         I_WAKE(),
 
-        // Loop back to receive next 10 lines
-        M_BX(LBL_MAIN_LOOP),
+        // Receive frame into buffer 1
+        I_MOVO(R1, ulp_frame_buf_1),
+        M_RETURN(LBL_RX_1, R3, LBL_SUBROUTINE_RX_ENTRY),
+        // Signal CPU: read buffer 1
+        I_MOVO(R0, ulp_active_buf),
+        I_MOVI(R1, 1),
+        I_ST(R1, R0, 0),
+        I_WAKE(),
 
-        // UART RX subroutine - 7E1 format for Linky - LF as termination character
-        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, '\n'),
+        M_BX(LBL_LOOP),
+
+        // UART RX subroutine - 7E1 format for Linky - ETX (0x03) as termination
+        M_INCLUDE_UART_RX_7E1_SIMPLE(LBL_SUBROUTINE_RX_ENTRY, LINKY_BAUD_RATE, LINKY_RX_GPIO, LINKY_TIC_FRAME_END, LINKY_MAX_FRAME_LEN),
     };
 
     // Configure GPIO for RX (input with pullup)
@@ -232,50 +240,56 @@ void init_ulp_linky(void)
     DEBUG_LOG(TAG, "ULP started, monitoring GPIO %d at %d baud", LINKY_RX_GPIO, LINKY_BAUD_RATE);
 }
 
+// Extract frame string from ULP buffer with 16-bit length in metadata word.
+// Same char packing as HULP (2 chars per 16-bit word), but supports >255 bytes.
+static int frame_string_get(ulp_var_t *buf, char *frame, int frame_size)
+{
+    int len = buf[0].val & 0xFFFF;
+    if (len <= 0 || len >= frame_size) return -1;
+    for (int i = 0; i < len; i++) {
+        frame[i] = (char)((buf[1 + i / 2].val >> ((i % 2) * 8)) & 0xFF);
+    }
+    frame[len] = '\0';
+    return len;
+}
+
 void get_linky_data(linky_data_t *data)
 {
     if (!data) return;
     memset(data, 0, sizeof(linky_data_t));
 
-    // Array of line buffers
-    ulp_var_t* ulp_rx_lines[10] = {
-        ulp_rx_line1,
-        ulp_rx_line2,
-        ulp_rx_line3,
-        ulp_rx_line4,
-        ulp_rx_line5,
-        ulp_rx_line6,
-        ulp_rx_line7,
-        ulp_rx_line8,
-        ulp_rx_line9,
-        ulp_rx_line10
-    };
+    // Read the buffer the ULP says is ready (ping-pong)
+    ulp_var_t *buf = (ulp_active_buf.val & 1) ? ulp_frame_buf_1 : ulp_frame_buf_0;
 
-    // Get received message for processing
-    for(int i = 0 ; i < 10; i++) {
+    char frame[LINKY_MAX_FRAME_LEN + 1];
+    int len = frame_string_get(buf, frame, sizeof(frame));
 
-        char msg_buffer[LINKY_MAX_MSG_LEN + 1];
-        int len = hulp_uart_string_get(ulp_rx_lines[i], msg_buffer, sizeof(msg_buffer), true);
+    DEBUG_LOG(TAG, "Frame buffer length: %d", len);
 
-        DEBUG_LOG(TAG, "Buffer length: %d", len);
+    if (len < 2 || frame[0] != LINKY_TIC_FRAME_START) {
+        DEBUG_LOGW(TAG, "No valid frame (len=%d, first=0x%02x)", len, len > 0 ? (unsigned char)frame[0] : 0);
+        return;  // Partial or empty frame — skip
+    }
 
-        if (len > 0) {
-#ifdef CONFIG_LINKY_DEBUG_LOGS
-            // Dump raw hex
-            ESP_LOG_BUFFER_HEX(TAG, msg_buffer, len);
-
-            // Dump as ASCII (with non-printable shown as '.')
-            for (int i = 0; i < len; i++) {
-                if (i % 32 == 0) {
-                    if (i > 0) printf("\n");
-                    printf("%04d: ", i);
-                }
-                char c = msg_buffer[i];
-                printf("%c", (c >= 32 && c < 127) ? c : '.');
-            }
-            printf("\n");
+#ifdef CONFIG_LINKEY_DEBUG_LOGS
+    // Dump raw hex
+    ESP_LOG_BUFFER_HEX(TAG, frame, len);
 #endif
-            process_message(msg_buffer, len, data);
+
+    // Extract and process each data group from the frame
+    // Frame format: STX [LF LABEL HT DATA HT CS CR] [LF ...] ...
+    int i = 1;  // Skip STX (0x02)
+    while (i < len) {
+        if (frame[i] == LINKY_TIC_GROUP_START) {
+            i++;  // Skip LF (start of data group)
+            int start = i;
+            // Find next LF or end of frame
+            while (i < len && frame[i] != LINKY_TIC_GROUP_START) i++;
+            if (i > start) {
+                process_message(&frame[start], i - start, data);
+            }
+        } else {
+            i++;
         }
     }
 }

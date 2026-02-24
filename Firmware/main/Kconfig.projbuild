@@ -1,101 +1,104 @@
-menu "Linky Monitor Configuration"
+menu "Linkey Monitor Configuration"
 
-    config LINKY_WIFI_SSID
+    config LINKEY_DEVICE_NAME
+        string "Device Name"
+        default "Linkey"
+        help
+            Device name shown in Home Assistant.
+
+    config LINKEY_WIFI_SSID
         string "WiFi SSID"
         default ""
         help
             SSID (network name) for the example to connect to.
 
-    config LINKY_WIFI_PASSWORD
+    config LINKEY_WIFI_PASSWORD
         string "WiFi Password"
         default ""
         help
             WiFi password (WPA or WPA2) for the example to use.
 
-    config LINKY_MQTT_BROKER_URI
+    config LINKEY_MQTT_BROKER_URI
         string "MQTT Broker URI"
         default "mqtt://192.168.1.100"
         help
             URI of the MQTT broker to connect to.
             Example: mqtt://192.168.1.100 or mqtts://mqtt.example.com
 
-    config LINKY_MQTT_USERNAME
+    config LINKEY_MQTT_USERNAME
         string "MQTT Username"
         default ""
         help
             Username for MQTT broker authentication (leave empty if not required).
 
-    config LINKY_MQTT_PASSWORD
+    config LINKEY_MQTT_PASSWORD
         string "MQTT Password"
         default ""
         help
             Password for MQTT broker authentication (leave empty if not required).
 
-    config LINKY_MQTT_TOPIC_PREFIX
+    config LINKEY_MQTT_TOPIC_PREFIX
         string "MQTT Topic Prefix"
-        default "linky"
+        default "linkey"
         help
-            Prefix for MQTT topics. Topics will be: <prefix>/iinst, <prefix>/base
+            Prefix for MQTT topics. Topics will be: <prefix>/state, <prefix>/status
 
-    config LINKY_RX_GPIO
+    config LINKEY_RX_GPIO
         int "Linky RX GPIO"
-        default 36
+        default 14
         help
             GPIO number for Linky TIC serial input (RX).
             Must be an RTC-capable GPIO: 0, 2, 4, 12-15, 25-27, 32-39
 
-    choice LINKY_SLEEP_MODE
-        prompt "Sleep Mode"
-        default LINKY_SLEEP_MODE_DEEP
-        help
-            Select sleep mode for power/speed tradeoff.
-            Deep Sleep: Ultra-low power (~1mA), slower wake-up (2-5s)
-            Light Sleep: Higher power (~30mA), very fast wake-up (200-500ms)
-
-        config LINKY_SLEEP_MODE_DEEP
-            bool "Deep Sleep (Ultra Low Power)"
-            help
-                Use deep sleep mode. WiFi/MQTT reconnect on every wake-up.
-                Power: ~1mA average, Wake-up time: 2-5 seconds
-
-        config LINKY_SLEEP_MODE_LIGHT
-            bool "Light Sleep (Fast Wake-up)"
-            help
-                Use light sleep with WiFi modem sleep. WiFi/MQTT stay connected.
-                Power: ~20-50mA average, Wake-up time: 200-500ms
-
-    endchoice
-
-    config LINKY_USE_STATIC_IP
+    config LINKEY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"
         default n
-        depends on LINKY_SLEEP_MODE_LIGHT
         help
-            Use static IP instead of DHCP for even faster connection.
-            Only recommended with Light Sleep mode.
+            Use static IP instead of DHCP for faster initial connection.
 
-    config LINKY_STATIC_IP
+    config LINKEY_STATIC_IP
         string "Static IP Address"
         default "192.168.1.200"
-        depends on LINKY_USE_STATIC_IP
+        depends on LINKEY_USE_STATIC_IP
         help
             Static IP address to use.
 
-    config LINKY_STATIC_GATEWAY
+    config LINKEY_STATIC_GATEWAY
         string "Gateway Address"
         default "192.168.1.1"
-        depends on LINKY_USE_STATIC_IP
+        depends on LINKEY_USE_STATIC_IP
         help
             Gateway IP address.
 
-    config LINKY_STATIC_NETMASK
+    config LINKEY_STATIC_NETMASK
         string "Netmask"
         default "255.255.255.0"
-        depends on LINKY_USE_STATIC_IP
+        depends on LINKEY_USE_STATIC_IP
         help
             Network mask.
 
-    config LINKY_DEBUG_LOGS
+    choice LINKEY_TARIFF_OPTION
+        prompt "Tariff Option"
+        default LINKEY_TARIFF_BASE
+        help
+            Select the Linky tariff option to determine which energy
+            index labels are parsed and published.
+
+        config LINKEY_TARIFF_BASE
+            bool "BASE"
+
+        config LINKEY_TARIFF_HPHC
+            bool "HPHC"
+
+        config LINKEY_TARIFF_EJP
+            bool "EJP"
+
+        config LINKEY_TARIFF_TEMPO
+            bool "TEMPO"
+
+    endchoice
+
+    config LINKEY_DEBUG_LOGS
         bool "Enable debug logging"
         default n
         help

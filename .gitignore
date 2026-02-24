@@ -13,6 +13,10 @@ PCB/MCAD files/*.FCBak
 # Firmware
 Firmware/build/
 Firmware/sdkconfig*
+Firmware/.cache/
 
 # VS Code
 .vscode/
+
+# Claude
+Firmware/CLAUDE.md
