@@ -97,6 +97,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"dev_cla\":\"current\","
             "\"unit_of_meas\":\"A\","
             "\"stat_cla\":\"measurement\","
+            "\"sug_dsp_prc\":0,"
             "\"ic\":\"mdi:current-ac\","
             "\"val_tpl\":\"{{ value_json.iinst }}\","
             "\"uniq_id\":\"linkey_%s_iinst\""
@@ -110,10 +111,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Off-Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.hchc }}\","
+            "\"val_tpl\":\"{{ value_json.hchc / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_hchc\""
         "},",
         mac);
@@ -122,10 +124,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.hchp }}\","
+            "\"val_tpl\":\"{{ value_json.hchp / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_hchp\""
         "},",
         mac);
@@ -135,10 +138,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Normal Hours Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.ejphn }}\","
+            "\"val_tpl\":\"{{ value_json.ejphn / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_ejphn\""
         "},",
         mac);
@@ -147,10 +151,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Mobile Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.ejphpm }}\","
+            "\"val_tpl\":\"{{ value_json.ejphpm / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_ejphpm\""
         "},",
         mac);
@@ -160,10 +165,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Blue Off-Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhcjb }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjb / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhcjb\""
         "},",
         mac);
@@ -172,10 +178,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Blue Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhpjb }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjb / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhpjb\""
         "},",
         mac);
@@ -184,10 +191,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"White Off-Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhcjw }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjw / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhcjw\""
         "},",
         mac);
@@ -196,10 +204,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"White Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhpjw }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjw / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhpjw\""
         "},",
         mac);
@@ -208,10 +217,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Red Off-Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhcjr }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhcjr / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhcjr\""
         "},",
         mac);
@@ -220,10 +230,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Red Peak Energy\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.bbrhpjr }}\","
+            "\"val_tpl\":\"{{ value_json.bbrhpjr / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_bbrhpjr\""
         "},",
         mac);
@@ -233,10 +244,11 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"p\":\"sensor\","
             "\"name\":\"Energy Index\","
             "\"dev_cla\":\"energy\","
-            "\"unit_of_meas\":\"Wh\","
+            "\"unit_of_meas\":\"kWh\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":3,"
             "\"ic\":\"mdi:counter\","
-            "\"val_tpl\":\"{{ value_json.base }}\","
+            "\"val_tpl\":\"{{ value_json.base / 1000 }}\","
             "\"uniq_id\":\"linkey_%s_base\""
         "},",
         mac);
@@ -250,6 +262,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"dev_cla\":\"voltage\","
             "\"unit_of_meas\":\"mV\","
             "\"stat_cla\":\"measurement\","
+            "\"sug_dsp_prc\":0,"
             "\"ic\":\"mdi:battery-heart-variant\","
             "\"val_tpl\":\"{{ value_json.vcap }}\","
             "\"uniq_id\":\"linkey_%s_vcap\""
@@ -264,6 +277,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"dev_cla\":\"apparent_power\","
             "\"unit_of_meas\":\"VA\","
             "\"stat_cla\":\"measurement\","
+            "\"sug_dsp_prc\":0,"
             "\"ic\":\"mdi:flash\","
             "\"val_tpl\":\"{{ value_json.papp }}\","
             "\"uniq_id\":\"linkey_%s_papp\""
@@ -278,6 +292,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"dev_cla\":\"current\","
             "\"unit_of_meas\":\"A\","
             "\"stat_cla\":\"measurement\","
+            "\"sug_dsp_prc\":0,"
             "\"ic\":\"mdi:alert\","
             "\"val_tpl\":\"{{ value_json.adps }}\","
             "\"uniq_id\":\"linkey_%s_adps\""
@@ -292,6 +307,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"dev_cla\":\"duration\","
             "\"unit_of_meas\":\"s\","
             "\"stat_cla\":\"total_increasing\","
+            "\"sug_dsp_prc\":0,"
             "\"ic\":\"mdi:timer-outline\","
             "\"val_tpl\":\"{{ value_json.uptime }}\","
             "\"uniq_id\":\"linkey_%s_uptime\""
