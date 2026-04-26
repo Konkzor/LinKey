@@ -103,7 +103,7 @@
 		(uuid "70460604-0bf9-4648-a76f-dde8f48703b4")
 	)
 	(embedded_fonts no)
-	(model "${KIPRJMOD}/3D step files/Conn_01x03.step"
+	(model "${KIPRJMOD}/MCAD files/3D step files/Conn_01x03.step"
 		(offset
 			(xyz 0 0 -2.5)
 		)
