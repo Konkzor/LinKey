@@ -6408,7 +6408,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Generic connector, single row, 01x04, script generated (kicad-library-utils/schlib/autogen/connector/)"
+		(property "Description" "Headers & Wire Housings .200 Power Terminal Strip"
 			(at 237.49 41.91 0)
 			(effects
 				(font
@@ -8848,7 +8848,7 @@
 				(hide yes)
 			)
 		)
-		(property "Datasheet" "~"
+		(property "Datasheet" "https://suddendocs.samtec.com/catalog_english/hpm.pdf?_gl=1*mr8nsh*_up*MQ..*_ga*NTc2NzY4MDc5LjE3NDAyMzU5NjI.*_ga_3KFNZC07WW*czE3NzU1OTQ0MDckbzIkZzAkdDE3NzU1OTQ0MDckajYwJGwwJGg2MDEyMTQ0MzQ."
 			(at 67.31 31.75 0)
 			(effects
 				(font
@@ -8858,6 +8858,42 @@
 			)
 		)
 		(property "Description" "Right angle 3-pin 5mm-pitch header"
+			(at 67.31 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Name" "Samtec"
+			(at 67.31 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Manufacturer_Part_Number" "HPM-03-04-T-S "
+			(at 67.31 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Supplier1_Name" "Mouser"
+			(at 67.31 31.75 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Supplier1_Part_Number" "200-HPM0304TS "
 			(at 67.31 31.75 0)
 			(effects
 				(font
