@@ -1,200 +1,159 @@
-# Linkey
+# Firmware Linkey
 
-Low-power ESP32 firmware for monitoring French Linky electricity meters using the ULP coprocessor with light sleep mode.
+## Vue d'ensemble
 
-## Overview
+Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surveiller en continu la sortie série TIC (Télé-Information Client) du Linky pendant que le CPU principal reste en *light sleep*. L'ULP reçoit chaque trame TIC complète dans un buffer RTC, puis réveille le CPU principal pour publier les données via MQTT.
 
-This firmware uses the ESP32's Ultra Low Power (ULP) coprocessor to continuously monitor the Linky meter's TIC (Télé-Information Client) serial output while the main CPU is in light sleep. The ULP collects multiple lines, then wakes the main CPU to publish data via MQTT.
-
-### Features
-
-- **True 7E1 UART support**: Properly handles 7 data bits + even parity (skipped)
-- **Light sleep mode**: WiFi stays connected, fast wake-up (TBD)
-- **WiFi optimizations**:
-  - BSSID/channel caching for instant reconnection
-  - Fast scan mode
-  - WiFi modem sleep for power saving
-  - Optional static IP (skips DHCP)
-- **MQTT optimizations**:
-  - QoS 1 for reliable delivery and better wifi disconnection detection
-  - Fast timeouts
-  - Last Will and Testament (LWT) for availability tracking
-- **Home Assistant integration**:
-  - MQTT device auto-discovery (single payload)
-  - Availability monitoring (online/offline)
-  - Custom icons and state classes for proper HA statistics
-- **Monitored values**:
-  - `IINST`: Instantaneous current (Amperes)
-  - `BASE`: Energy index (Watt-hours)
-  - `PAPP`: Apparent power (VA)
-  - `ADPS`: Overcurrent warning current (Amperes)
-  - `VCAP`: Supercap voltage (millivolts)
-  - `uptime`: Device uptime (seconds)
-- **Multi-line buffering**: ULP collects 10 lines before waking CPU
-- **Checksum validation**: Validates Linky TIC checksum `(sum & 0x3F) + 0x20`
-- **RGB LED status**: Visual feedback for voltage and operation status
-- **Supercap voltage monitoring**: ADC reading on GPIO 33
-- **Debug logging**: Configurable verbose logging for troubleshooting
-
-## Hardware Requirements
-
-- **ESP32** (original, not ESP32-C3/S2/S3)
-- **Linky meter** with TIC output
-- **Optocoupler circuit** (required for galvanic isolation)
-- **Supercapacitor** for energy storage
-- **RGB LED** (optional, for status indication)
-
-### GPIO Assignments
-
-| Function | GPIO |
-|----------|------|
-| Linky RX | 14 (configurable) |
-| Supercap ADC | 33 |
-| RGB Red LED | 13 |
-| RGB Green LED | 15 |
-| RGB Blue LED | 2 |
-
-### Linky TIC Connection (with Optocoupler)
-
-The Linky meter provides a TIC output that **requires galvanic isolation** using an optocoupler.
-
-**Note**: The optocoupler inverts the signal. The Linky TIC output is designed to work with this configuration.
-
-## Software Requirements
-
-- **ESP-IDF v5.4.1** or later
-- **HULP library** (included as submodule)
-
-## Building and Flashing
-
-### 1. Clone and Initialize
-
-```bash
-cd /path/to/LinKey/Firmware
-git submodule update --init --recursive
+```
+┌─────────────────────────────────────────────┐
+│  CPU principal (FSM) (réveil périodique)    │
+│  • Surveillance tension avec seuils de      │
+│    fallback par état                        │
+│  • Gestion des connexions WiFi/MQTT         │
+│  • Auto-découverte HA à la connexion MQTT   │
+│  • Publication JSON des données capteurs    │
+│  • Modem sleep + scaling de fréquence CPU   │
+└─────────────────────────────────────────────┘
+                    ▲
+                    │
+                    │
+┌─────────────────────────────────────────────┐
+│  Coprocesseur ULP (toujours actif)          │
+│  • Bit-bang UART à 1200 bauds (7E1)         │
+│  • Trame complète (ETX) en double buffer    │
+│  • Tourne en continu                        │
+└─────────────────────────────────────────────┘
 ```
 
-### 2. Set up ESP-IDF environment
+## Fonctionnalités
 
-```bash
-source ~/esp/v5.4.1/esp-idf/export.sh
+- **Vrai support UART 7E1** : gestion correcte des 7 bits de données + parité paire (ignorée)
+- **Mode *light sleep*** : WiFi maintenu connecté, réveil rapide (à mesurer)
+- **WiFi** :
+  - Mise en cache du BSSID/canal pour reconnexion instantanée
+  - *Fast scan*
+  - *Modem sleep* WiFi pour économie d'énergie
+  - IP statique optionnelle (court-circuite le DHCP)
+- **MQTT** :
+  - QoS 1 pour une livraison fiable et une meilleure détection des coupures WiFi
+  - Délais d'expiration courts
+  - *Last Will and Testament* (LWT) pour le suivi de disponibilité
+  - Info de debug envoyées au broker :
+     - `VCAP` : tension du supercondensateur (millivolts)
+     - `uptime` : temps de fonctionnement (secondes)
+- **Intégration Home Assistant** :
+  - Auto-découverte MQTT (payload unique)
+  - Suivi de disponibilité (online/offline)
+  - Icônes et *state classes* personnalisés pour des statistiques HA correctes
+- **Réception trame par trame** : l'ULP reçoit une trame TIC complète (terminée par ETX `0x03`) en double buffer RTC ping-pong, puis réveille le CPU
+- **Validation de checksum** : vérifie le checksum TIC Linky `(sum & 0x3F) + 0x20`
+- **Statut LED RGB** : flash bref (10 ms) à chaque itération de la FSM, couleur dépendant de l'état courant — la LED reste éteinte le reste du temps pour économiser l'énergie
+- **Surveillance tension supercondensateur** : lecture de la tension du condensateur
+- **Logs de debug** : journalisation verbeuse configurable pour le diagnostic
+
+## Fonctionnement
+
+### Machine d'état (FSM)
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> INIT
+    INIT --> WAIT_VOLTAGE
+    WAIT_VOLTAGE --> ACTIVE: V ≥ 2,5 V
+    ACTIVE --> WAIT_VOLTAGE: V faible (fallback)
+
+    state ACTIVE {
+        direction LR
+        [*] --> WIFI_CONNECT
+        WIFI_CONNECT --> MQTT_CONNECT: WiFi OK
+        MQTT_CONNECT --> WIFI_CONNECT: WiFi perdu
+        MQTT_CONNECT --> WAIT_ULP_DATA: MQTT OK
+        WAIT_ULP_DATA --> WIFI_CONNECT: WiFi/MQTT perdu
+        WAIT_ULP_DATA --> PUBLISH_DATA: trame reçue
+        PUBLISH_DATA --> WAIT_ULP_DATA: trame suivante
+        PUBLISH_DATA --> MQTT_CONNECT: échec publication
+        PUBLISH_DATA --> WIFI_CONNECT: WiFi perdu
+    }
 ```
 
-### 3. Configure the project
+| État | Rôle | Couleur du flash LED |
+|------|------|----------------------|
+| `INIT` | Init NVS, LEDs, ADC, gestion d'énergie | Cyan |
+| `WAIT_VOLTAGE` | Attend que le supercondensateur soit chargé (≥ 2,5 V) | Rouge |
+| `WIFI_CONNECT` | Connexion WiFi (avec cache BSSID/canal), retry interne en cas d'échec | Bleu |
+| `MQTT_CONNECT` | Connexion au broker MQTT + auto-découverte HA, retry interne si broker indisponible | Magenta |
+| `WAIT_ULP_DATA` | Init ULP + attente d'une trame TIC complète, CPU en *light sleep* | Jaune |
+| `PUBLISH_DATA` | Lecture buffer ULP, validation checksum (par groupe d'information), publication MQTT | Vert |
 
-```bash
-idf.py menuconfig
-```
+> **Fallback tension (`ACTIVE → WAIT_VOLTAGE`)** : dans tous les états regroupés sous `ACTIVE`, la FSM retombe vers `WAIT_VOLTAGE` si la tension descend sous `VOLTAGE_FALLBACK_MIN_MV` (1,5 V) **ou** chute de plus de 200 mV par rapport au pic atteint depuis l'entrée dans l'état (seuil dynamique). Les connexions WiFi/MQTT sont alors arrêtées.
 
-Navigate to **"Linkey Monitor Configuration"** and configure:
+### Topics MQTT
 
-#### Required Settings:
-- **Device Name**: Name shown in Home Assistant (default: `Linkey`)
-- **WiFi SSID**: Your WiFi network name
-- **WiFi Password**: Your WiFi password
-- **MQTT Broker URI**: e.g., `mqtt://192.168.1.100`
-- **MQTT Topic Prefix**: Default `linkey` (topics: `linkey/state`, `linkey/status`)
-- **Linky RX GPIO**: Default `14` (must be RTC-capable GPIO)
-
-#### Optional Settings:
-- **MQTT Username/Password**: If your broker requires authentication
-- **Use Static IP**: Enable for faster initial connection
-- **Enable debug logging**: For troubleshooting
-
-### 4. Build
-
-```bash
-idf.py build
-```
-
-### 5. Flash
-
-```bash
-idf.py -p /dev/ttyUSB0 flash monitor
-```
-
-## Operation
-
-### Boot Sequence
-
-1. **Initialize peripherals**:
-   - RGB LEDs
-   - Supercap ADC
-   - Power management (light sleep enabled)
-
-2. **Wait for supercap charge**:
-   - Waits until supercap voltage > 2.5V
-   - Red LED blinks if < 2V
-   - Orange (red+green) if 2-2.5V
-   - Green flash when ready
-
-3. **Initialize connectivity**:
-   - Connect to WiFi (with modem sleep)
-   - Connect to MQTT broker
-   - Initialize ULP program
-
-### Main Loop
-
-1. **Light sleep**:
-   - CPU enters automatic light sleep
-   - WiFi stays connected (modem sleep)
-   - ULP continuously receives UART data
-
-2. **ULP operation**:
-   - Bit-bangs UART at 1200 baud (7E1)
-   - Collects 10 lines into buffers
-   - Wakes main CPU periodically
-
-3. **Main CPU wake-up**:
-   - Reads supercap voltage (LED feedback)
-   - Reads stored values from ULP buffers
-   - Validates checksums
-   - Publishes valid data to MQTT
-   - Returns to light sleep
-   - **Wake time**: TBD
-
-### MQTT Topics
-
-With default prefix `linkey`:
-- `linkey/state` - JSON payload with sensor data (only valid values included):
+Avec le préfixe par défaut `linkey` :
+- `linkey/state` — payload JSON contenant les données capteurs (seules les valeurs valides sont incluses) :
   ```json
-  {"iinst":3,"base":12345678,"papp":690,"vcap":2850,"uptime":3600}
+  {"iinst":3,"base":12345678,"papp":690,"adps":30,"vcap":2850,"uptime":3600}
   ```
-- `linkey/status` - Device availability (`online`/`offline` via LWT)
+- `linkey/status` — disponibilité de l'appareil (`online`/`offline` via LWT)
 
-**Note**: Only Linky values with valid checksums are included in the JSON. VCAP and uptime are always present.
+**Note** : seules les valeurs Linky issues d'un groupe d'information avec un checksum valide **et qui ont changé depuis la dernière publication** sont incluses dans le JSON. `VCAP` et `uptime` sont toujours présents. Les index spécifiques à un tarif (HCHC/HCHP, EJPHN/EJPHPM, BBRH*) n'apparaissent que si le compteur est configuré avec le contrat correspondant.
 
 ### Home Assistant
 
-The device is auto-discovered via MQTT. On connection, a single discovery payload is published to:
+L'appareil est auto-découvert via MQTT. À la connexion, un payload de découverte unique est publié sur :
 ```
 homeassistant/device/linkey_<mac>/config
 ```
 
-This registers the device with all sensors in Home Assistant. The device appears with:
-- **Current** (IINST) - instantaneous measurement
-- **Energy Index** (BASE) - total increasing for energy dashboard
-- **Apparent Power** (PAPP) - instantaneous measurement
-- **Overcurrent Warning** (ADPS) - overcurrent alert
-- **Supercap Voltage** (VCAP) - instantaneous measurement
-- **Uptime** - device uptime in seconds
+Cela enregistre l'appareil avec tous ses capteurs dans Home Assistant. L'appareil apparaît avec :
+- **Courant** (IINST) — mesure instantanée
+- **Index d'énergie** (BASE) — *total increasing* pour le tableau de bord énergie
+- **Puissance apparente** (PAPP) — mesure instantanée
+- **Avertissement de surintensité** (ADPS) — alerte de surcharge
+- **Tension supercondensateur** (VCAP) — mesure instantanée
+- **Uptime** — temps de fonctionnement en secondes
 
-### LED Status Indicators
+## Format des trames TIC Linky
 
-| Voltage | LED Color |
-|---------|-----------|
-| < 1V | Red blink |
-| 1-2V | Orange blink |
-| > 2V | Green blink |
+> Source : [Enedis-NOI-CPT_54E — Sorties de télé-information client des appareils de comptage Linky](../Doc/Enedis-MOP-CPT_002E.pdf), §5.3.6 et §6.
 
-## Linky TIC Message Format
+### Couche Liaison 
 
-The Linky meter sends messages in this format:
+Le Linky émet des **trames** en continu. Chaque trame est délimitée par `STX` (`0x02`) en début et `ETX` (`0x03`) en fin, et est composée de plusieurs **groupes d'information** :
+
 ```
-<LABEL> <DATA> <CHECKSUM>\r\n
+STX <groupe d'info> <groupe d'info> ... <groupe d'info> ETX
 ```
 
-Example:
+Un groupe d'information porte une étiquette, une donnée et un checksum :
+
+```
+<LF><étiquette><SEP><donnée><SEP><checksum><CR>
+```
+
+(`LF` = `0x0A`, `CR` = `0x0D` ; le caractère `<SEP>` dépend du mode — voir ci-dessous.)
+
+Le checksum est calculé pour chaque groupe d'information sur la zone contrôlée allant du début de l'étiquette au délimiteur précédant le checksum :
+
+```c
+uint8_t checksum = (sum_of_bytes & 0x3F) + 0x20;
+```
+
+Le résultat est toujours un caractère ASCII imprimable (entre `0x20` et `0x5F`).
+
+Les deux modes (**historique** et **standard**) partagent cette structure ; ils diffèrent par le caractère séparateur, le débit série, la présence d'un horodatage et la liste des étiquettes émises.
+
+### Mode historique
+
+| | Mode historique |
+|-|-|
+| Débit série | 1200 bauds, 7E1 |
+| Séparateur `<SEP>` | `SP` (`0x20`) |
+| Horodatage | Aucun |
+| Zone contrôlée par le checksum | `<étiquette><SP><donnée>` (le second `SP` est exclu) |
+
+Exemple (corps d'une trame, sans STX/ETX) :
 ```
 IINST 003 :
 BASE 012345678 '
@@ -202,82 +161,98 @@ PAPP 00690 +
 ADPS 030 !
 ```
 
-**Serial parameters**: 1200 baud, 7 data bits, Even parity, 1 stop bit (7E1)
+**Étiquettes supportées par le firmware** :
 
-**Checksum calculation**:
-```c
-uint8_t checksum = (sum_of_bytes & 0x3F) + 0x20;
+| Étiquette | Description | Unité |
+|-----------|-------------|-------|
+| `IINST` | Courant instantané | A |
+| `PAPP` | Puissance apparente | VA |
+| `ADPS` | Avertissement de surintensité | A |
+| `BASE` | Index énergie — contrat **BASE** | Wh |
+| `HCHC`, `HCHP` | Index énergie — contrat **HP/HC** | Wh |
+| `EJPHN`, `EJPHPM` | Index énergie — contrat **EJP** | Wh |
+| `BBRHCJB`, `BBRHPJB`, `BBRHCJW`, `BBRHPJW`, `BBRHCJR`, `BBRHPJR` | Index énergie — contrat **Tempo** | Wh |
+
+### Mode standard
+
+| | Mode standard |
+|-|-|
+| Débit série | 9600 bauds, 7E1 |
+| Séparateur `<SEP>` | `HT` (`0x09`) |
+| Horodatage | Optionnel, intercalé entre l'étiquette et la donnée : `<LF><étiquette><HT><horodate><HT><donnée><HT><checksum><CR>` |
+| Zone contrôlée par le checksum | Inclut le `HT` final (avant le checksum) |
+
+> [!WARNING]
+> Non supporté par le firmware actuel.
+
+## Logiciel requis
+
+- **ESP-IDF v5.4.1** ou supérieur
+- **Bibliothèque HULP** (incluse en sous-module)
+
+## Compilation et flashage
+
+### 1. Cloner et initialiser
+
+```bash
+cd /chemin/vers/LinKey/Firmware
+git submodule update --init --recursive
 ```
 
-## Power Consumption
+### 2. Configurer l'environnement ESP-IDF
 
-- **Light sleep**: TBD
-- **Active (publishing)**: TBD
-- **Average**: TBD
-
-## Project Structure
-
-```
-Firmware/
-├── CMakeLists.txt              # Main project CMake
-├── sdkconfig.defaults          # Default configuration
-├── main/
-│   ├── CMakeLists.txt          # Component CMake
-│   ├── Kconfig.projbuild       # Configuration menu
-│   ├── main.c                  # FSM application (state machine, voltage monitoring)
-│   ├── ulp_linky.cpp           # ULP program (7E1 UART, TIC parsing)
-│   ├── ulp_linky.h             # ULP program header
-│   ├── wifi_manager.c          # WiFi connection management
-│   ├── wifi_manager.h          # WiFi manager header
-│   ├── mqtt_manager.c          # MQTT client, HA discovery, JSON publishing
-│   ├── mqtt_manager.h          # MQTT manager header
-│   └── debug.h                 # Debug logging macros
-└── HULP/                       # HULP library (submodule)
+```bash
+source ~/esp/v5.4.1/esp-idf/export.sh
 ```
 
-## Architecture
+### 3. Configurer le projet
 
-### FSM States
-
-```
-INIT → WAIT_VOLTAGE → WIFI_CONNECT → MQTT_CONNECT → WAIT_ULP_DATA → PUBLISH_DATA
-                ↑                                                         │
-                └─────────────── voltage low ──────────────────────────────┘
+```bash
+idf.py menuconfig
 ```
 
-Any state falls back to `WAIT_VOLTAGE` if supercap voltage drops below threshold.
+Naviguer dans **« Linkey Monitor Configuration »** et configurer :
 
-### System Overview
+#### Paramètres requis :
+- **Device Name** : nom affiché dans Home Assistant (par défaut : `Linkey`)
+- **WiFi SSID** : nom de votre réseau WiFi
+- **WiFi Password** : mot de passe WiFi
+- **MQTT Broker URI** : ex. `mqtt://192.168.1.100`
+- **MQTT Topic Prefix** : par défaut `linkey` (topics : `linkey/state`, `linkey/status`)
 
-```
-┌─────────────────────────────────────────────┐
-│  Main CPU (FSM) (Periodic wake)             │
-│  • Voltage monitoring with per-state        │
-│    fallback thresholds                      │
-│  • WiFi/MQTT connection management          │
-│  • HA auto-discovery on MQTT connect        │
-│  • JSON sensor data publishing              │
-│  • Modem sleep + CPU frequency scaling      │
-└─────────────────────────────────────────────┘
-                    ▲
-                    │
-                    │
-┌─────────────────────────────────────────────┐
-│  ULP Coprocessor (Always Running)           │
-│  • Bit-bangs UART at 1200 baud (7E1)        │
-│  • Collects 10 lines into buffers           │
-│  • Runs continuously                        │
-└─────────────────────────────────────────────┘
+#### Paramètres optionnels :
+- **MQTT Username/Password** : si votre broker requiert une authentification
+- **Use Static IP** : à activer pour une connexion initiale plus rapide
+- **Enable debug logging** : pour le diagnostic
+
+### 4. Compiler
+
+```bash
+idf.py build
 ```
 
-## References
+### 5. Flasher
 
-- [HULP Library](https://github.com/boarchuz/HULP)
-- [ESP32 ULP Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp.html)
-- [Linky TIC Documentation](Doc/Enedis-MOP-CPT_002E.pdf) - Linky TIC specification (included in `Doc/`)
-- [ESP32 Power Management](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/power_management.html)
-- [HA MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+```bash
+idf.py -p /dev/ttyUSB0 flash monitor
+```
 
-## License
+## Références
 
-This project uses the HULP library which has its own license. Check the HULP directory for details.
+- [Bibliothèque HULP](https://github.com/boarchuz/HULP)
+- [Documentation ULP ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp.html)
+- [Documentation TIC Linky](../Doc/Enedis-MOP-CPT_002E.pdf) — spécification TIC Linky (incluse dans `Doc/`)
+- [Gestion d'énergie ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/power_management.html)
+- [Découverte MQTT HA](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
+
+## Licence
+
+Le code du firmware (`Firmware/main/`) est distribué sous **licence MIT**. Voir [`Firmware/LICENSE`](LICENSE) pour le texte complet.
+
+> [!NOTE]
+> Le matériel (sources KiCad, Gerbers, modèles 3D dans `PCB/`) est distribué sous une licence distincte — **CERN-OHL-W-2.0** — voir [`LICENSE`](../LICENSE) à la racine du dépôt.
+
+### Dépendances tierces
+
+- **HULP** (`Firmware/HULP/`, sous-module Git) — [MIT](HULP/LICENSE), © 2019 Matt
+- **ESP-IDF** — [Apache 2.0](https://github.com/espressif/esp-idf/blob/master/LICENSE)

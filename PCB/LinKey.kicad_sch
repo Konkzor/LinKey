@@ -9863,7 +9863,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "ac532d4d-6e42-435d-a022-fcda0da33a48")
 		(property "Reference" "L1"
 			(at 205.74 105.41 90)

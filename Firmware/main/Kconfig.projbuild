@@ -43,13 +43,6 @@ menu "Linkey Monitor Configuration"
         help
             Prefix for MQTT topics. Topics will be: <prefix>/state, <prefix>/status
 
-    config LINKEY_RX_GPIO
-        int "Linky RX GPIO"
-        default 14
-        help
-            GPIO number for Linky TIC serial input (RX).
-            Must be an RTC-capable GPIO: 0, 2, 4, 12-15, 25-27, 32-39
-
     config LINKEY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"
         default n
