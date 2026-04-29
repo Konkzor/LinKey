@@ -219,7 +219,6 @@ Naviguer dans **« Linkey Monitor Configuration »** et configurer :
 - **WiFi Password** : mot de passe WiFi
 - **MQTT Broker URI** : ex. `mqtt://192.168.1.100`
 - **MQTT Topic Prefix** : par défaut `linkey` (topics : `linkey/state`, `linkey/status`)
-- **Linky RX GPIO** : par défaut `14` (doit être un GPIO compatible RTC)
 
 #### Paramètres optionnels :
 - **MQTT Username/Password** : si votre broker requiert une authentification
