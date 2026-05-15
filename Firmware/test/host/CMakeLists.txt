@@ -30,3 +30,11 @@ add_executable(test_voltage_state
 target_include_directories(test_voltage_state PRIVATE ${LINKEY_MAIN_DIR})
 target_link_libraries(test_voltage_state PRIVATE unity)
 add_test(NAME voltage_state COMMAND test_voltage_state)
+
+add_executable(test_tic_parser
+    test_tic_parser.c
+    ${LINKEY_MAIN_DIR}/tic_parser.c
+)
+target_include_directories(test_tic_parser PRIVATE ${LINKEY_MAIN_DIR})
+target_link_libraries(test_tic_parser PRIVATE unity)
+add_test(NAME tic_parser COMMAND test_tic_parser)
