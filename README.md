@@ -1,8 +1,11 @@
-# LinKey
-
 <p align="center">
-  <img src="Doc/images/image_render_pcb_top_seul.png" alt="Rendu 3D de la carte LinKey" width="300">
+  <img src="Doc/images/banniere_linkey.png" width="600" alt="Logo Linkey">
 </p>
+
+[![CI](https://github.com/Konkzor/LinKey/actions/workflows/ci.yml/badge.svg)](https://github.com/Konkzor/LinKey/actions/workflows/ci.yml)
+[![Firmware License: MIT](https://img.shields.io/badge/firmware-MIT-blue.svg)](Firmware/LICENSE)
+[![Hardware License: CERN-OHL-W-2.0](https://img.shields.io/badge/hardware-CERN--OHL--W--2.0-blue.svg)](LICENSE)
+[![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.4-red.svg)](https://docs.espressif.com/projects/esp-idf/en/v5.4/)
 
 Moniteur **open-hardware** basse consommation à base d'ESP32 pour le compteur électrique **Linky**, avec intégration native à **Home Assistant** via MQTT.
 
@@ -52,6 +55,10 @@ idf.py -p /dev/ttyUSB0 flash monitor
 ## PCB
 
 Le PCB a été réalisé sous KiCad 9.
+
+<p align="center">
+  <img src="Doc/images/image_render_pcb_top_seul.png" alt="Rendu 3D de la carte LinKey" width="300">
+</p>
 
 Les sources de la carte se trouvent dans [`PCB/`](PCB/). Voir [`PCB/README.md`](PCB/README.md) pour une description des composants, le brochage de l'ESP32 et la connexion TIC.
 
