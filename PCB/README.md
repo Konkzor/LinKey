@@ -118,15 +118,30 @@ Convertit la tension variable du supercondensateur (0 V → 2,7 V) en un rail 3,
 | [`LinKey.kicad_pro`](LinKey.kicad_pro) | Projet KiCad 9 |
 | [`LinKey.kicad_sch`](LinKey.kicad_sch) | Schéma |
 | [`LinKey.kicad_pcb`](LinKey.kicad_pcb) | Routage |
-| [`LinKey.csv`](LinKey.csv) | Nomenclature (BOM) |
-| [`Gerber/`](Gerber/) | Fichiers de fabrication (.gbr et NC drill)|
+| [`fab-output.kicad_jobset`](fab-output.kicad_jobset) | Jobset KiCad décrivant les sorties de fabrication générées en CI |
 | [`MCAD files/`](MCAD%20files/) | Modèles 3D des composants (STEP) |
 | [`LinKey_Lib_Footprints.pretty/`](LinKey_Lib_Footprints.pretty/) | Bibliothèque d'empreintes du projet |
 | [`LinKey_Lib_Symbols.kicad_sym`](LinKey_Lib_Symbols.kicad_sym) | Bibliothèque de symboles du projet |
 
 ## Fabrication
 
-Les Gerbers de [`Gerber/`](Gerber/) peuvent être envoyés tels quels à un fabricant de PCB standard.
+Les fichiers de fabrication ne sont **pas versionnés** : ils sont régénérés à chaque push par le workflow GitHub Actions [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (job `pcb-fab`) à partir du jobset [`fab-output.kicad_jobset`](fab-output.kicad_jobset), et publiés en tant qu'artefact nommé **`fab`** sur l'exécution correspondante.
+
+Contenu de l'artefact `fab` :
+
+| Fichier | Description |
+|---------|-------------|
+| `gerbers/LinKey-F_Cu.gbr`, `B_Cu.gbr`, `In1_Cu.gbr`, `In2_Cu.gbr` | Couches cuivre (4 couches) |
+| `gerbers/LinKey-F_Mask.gbr`, `B_Mask.gbr` | Masques de soudure |
+| `gerbers/LinKey-F_Paste.gbr`, `B_Paste.gbr` | Pochoir pâte à braser |
+| `gerbers/LinKey-F_Silkscreen.gbr`, `B_Silkscreen.gbr` | Sérigraphies |
+| `gerbers/LinKey-Edge_Cuts.gbr` | Contour de la carte |
+| `gerbers/LinKey-job.gbrjob` | Métadonnées Gerber X2 (stackup) |
+| `LinKey-PTH.drl`, `LinKey-NPTH.drl` | Perçages (plaqués / non plaqués) |
+| `LinKey_positions-all.csv` | Fichier de positions (pick & place) |
+| `LinKey_Bill_of_Materials.csv` | Nomenclature (BOM) |
+
+Pour récupérer l'archive : ouvrir l'exécution CI sur GitHub → onglet *Summary* → section *Artifacts* → **`fab`**.
 
 ## Consommation
 

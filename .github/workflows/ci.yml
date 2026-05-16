@@ -75,28 +75,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate Gerbers
-        working-directory: PCB
-        run: |
-          mkdir -p fab/gerbers
-          kicad-cli pcb export gerbers --output fab/gerbers/ LinKey.kicad_pcb
-
-      - name: Generate drill files
-        working-directory: PCB
-        run: kicad-cli pcb export drill --output fab/gerbers/ LinKey.kicad_pcb
-
-      - name: Generate position file
-        working-directory: PCB
-        run: |
-          mkdir -p fab
-          kicad-cli pcb export pos --output fab/LinKey-pos.csv --format csv --units mm LinKey.kicad_pcb
-
-      - name: Generate BOM
-        working-directory: PCB
-        run: kicad-cli sch export bom --output fab/LinKey-bom.csv LinKey.kicad_sch
-
+      - name: Generate fab files                                                    
+        working-directory: PCB                                                      
+        run: kicad-cli jobset run --stop-on-error -f fab-output.kicad_jobset LinKey.kicad_pro
+      
       - name: Upload fab artifacts
         uses: actions/upload-artifact@v4
         with:
           name: fab
-          path: PCB/fab/
+          path: PCB/fab-output/
