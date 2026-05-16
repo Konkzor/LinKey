@@ -7,6 +7,8 @@ PCB/*.kicad_pcb-bak
 PCB/*.lck
 PCB/*.bak
 PCB/*.kicad_prl
+PCB/fab-output/
+PCB/*.zip
 
 PCB/MCAD files/*.FCBak
 
