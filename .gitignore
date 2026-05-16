@@ -13,6 +13,7 @@ PCB/MCAD files/*.FCBak
 # Firmware
 Firmware/build/
 Firmware/sdkconfig*
+!Firmware/sdkconfig.defaults
 Firmware/.cache/
 
 # VS Code

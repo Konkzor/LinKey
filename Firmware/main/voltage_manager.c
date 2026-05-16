@@ -1,4 +1,5 @@
 #include "voltage_manager.h"
+#include "voltage_state.h"
 #include "driver/adc.h"
 #include "esp_adc_cal.h"
 #include "debug.h"
@@ -14,7 +15,7 @@ static const char *TAG = "VOLTAGE_MGR";
 static esp_adc_cal_characteristics_t *adc_chars = NULL;
 
 // Dynamic voltage peak tracker for drain detection
-static int dynamic_voltage_peak_mv = 0;
+static voltage_state_t voltage_state = {0};
 
 void voltage_init(void)
 {
@@ -46,30 +47,26 @@ int voltage_read_mv(void)
 bool voltage_is_low(uint16_t threshold)
 {
     int voltage_mv = voltage_read_mv();
-    if (voltage_mv < threshold) {
+    bool low = voltage_state_is_low(voltage_mv, threshold);
+    if (low) {
         DEBUG_LOGW(TAG, "Voltage dropped to %d mV (threshold %d)", voltage_mv, threshold);
-        return true;
     }
-    return false;
+    return low;
 }
 
 bool voltage_is_low_dynamic(uint16_t floor_mv)
 {
     int voltage_mv = voltage_read_mv();
-    if (voltage_mv > dynamic_voltage_peak_mv) {
-        dynamic_voltage_peak_mv = voltage_mv;
+    bool low = voltage_state_is_low_dynamic(&voltage_state, voltage_mv,
+                                            floor_mv, VOLTAGE_FALLBACK_DROP_MV);
+    if (low) {
+        DEBUG_LOGW(TAG, "Voltage %d mV below dynamic threshold (peak %d, floor %d)",
+                   voltage_mv, voltage_state.peak_mv, floor_mv);
     }
-    int drop_threshold = dynamic_voltage_peak_mv - VOLTAGE_FALLBACK_DROP_MV;
-    uint16_t threshold = (drop_threshold > floor_mv) ? drop_threshold : floor_mv;
-    if (voltage_mv < threshold) {
-        DEBUG_LOGW(TAG, "Voltage %d mV below dynamic threshold %d mV (peak %d, floor %d)",
-                   voltage_mv, threshold, dynamic_voltage_peak_mv, floor_mv);
-        return true;
-    }
-    return false;
+    return low;
 }
 
 void voltage_reset_peak(void)
 {
-    dynamic_voltage_peak_mv = 0;
+    voltage_state_reset_peak(&voltage_state);
 }

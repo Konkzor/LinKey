@@ -237,6 +237,38 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
+## Tests
+
+Les tests unitaires *host* couvrent la logique pure extraite des modules — pour le moment uniquement `voltage_state.c` (seuils et suivi du pic dynamique). Le framework Unity est récupéré à la configuration via `FetchContent`.
+
+### Exécuter localement
+
+Pour éxécuter les tests localement :
+
+```bash
+cd Firmware/test/host
+cmake -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+Temps d'exécution attendu : < 1 s pour les 13 cas actuels.
+
+### Intégration continue (CI)
+
+Le workflow GitHub Actions `.github/workflows/ci.yml` lance à chaque *push* et *pull request* :
+
+1. **`host-tests`** — `ubuntu-latest`, build CMake + Unity + ctest.
+2. **`firmware-build`** — image Docker `espressif/idf:release-v5.4`, `idf.py build` complet pour valider que les refactorings ne cassent pas la compilation du firmware.
+
+### Ajouter un nouveau test
+
+Tout fichier `*_state.c` / `*_logic.c` / `*_payload.c` dans `Firmware/main/` sans `#include` ESP-IDF est testable ici. Ajouter un `test_<nom>.c` dans `Firmware/test/host/`, puis une paire `add_executable` / `add_test` dans son `CMakeLists.txt`.
+
+### Tests qui nécessiteraient des mocks
+
+L'approche actuelle teste uniquement la logique pure extraite. Étendre la couverture aux modules suivants imposerait de simuler tout ou partie de l'API ESP-IDF — soit avec des stubs écrits à la main (header `esp_log.h` neutralisé, etc.), soit avec un générateur comme **CMock**.
+
 ## Références
 
 - [Bibliothèque HULP](https://github.com/boarchuz/HULP)

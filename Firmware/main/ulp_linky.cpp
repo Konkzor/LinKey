@@ -1,6 +1,5 @@
 #include <string.h>
 #include <stddef.h>
-#include <ctype.h>
 #include "esp_log.h"
 
 extern "C" {
@@ -9,6 +8,7 @@ extern "C" {
 }
 
 #include "ulp_linky.h"
+#include "tic_parser.h"
 #include "debug.h"
 
 static const char *TAG = "ULP_LINKY";
@@ -64,131 +64,6 @@ static const char *TAG = "ULP_LINKY";
 RTC_DATA_ATTR ulp_var_t ulp_frame_buf_0[1 + (LINKY_MAX_FRAME_LEN / 2)];
 RTC_DATA_ATTR ulp_var_t ulp_frame_buf_1[1 + (LINKY_MAX_FRAME_LEN / 2)];
 RTC_DATA_ATTR ulp_var_t ulp_active_buf;  // 0 or 1: which buffer CPU should read
-
-// Helper to compare strings in ULP context
-// Returns 1 if str1 starts with str2
-static int str_starts_with(const char *str1, const char *str2) {
-    while (*str2) {
-        if (*str1 != *str2) return 0;
-        str1++;
-        str2++;
-    }
-    return 1;
-}
-
-// Parse integer from string
-static uint32_t parse_uint(const char *str, int *len) {
-    uint32_t val = 0;
-    int count = 0;
-    while (*str && isdigit((unsigned char)*str)) {
-        val = val * 10 + (*str - '0');
-        str++;
-        count++;
-    }
-    if (len) *len = count;
-    return val;
-}
-
-// Validate Linky checksum
-// Format: "LABEL\tDATA\tCS\r" (data group extracted from TIC frame)
-// Checksum = (sum_of_bytes & 0x3F) + 0x20
-static int validate_checksum(const char *msg, int msg_len) {
-    if (msg_len < 5) return 0; // Too short
-
-    // Find checksum (last char before group end/start delimiters)
-    int cs_pos = msg_len - 1;
-    while (cs_pos > 0 && (msg[cs_pos] == LINKY_TIC_GROUP_END || msg[cs_pos] == LINKY_TIC_GROUP_START)) {
-        cs_pos--;
-    }
-
-    if (cs_pos < 2) return 0;
-
-    char expected_cs = msg[cs_pos];
-
-    // Calculate checksum (sum all bytes except checksum and line endings)
-    int sum = 0;
-    for (int i = 0; i < cs_pos - 1; i++) { // -1 to skip the space before checksum
-        sum += (unsigned char)msg[i];
-    }
-
-    char calculated_cs = (sum & 0x3F) + 0x20;
-
-    return (calculated_cs == expected_cs);
-}
-
-// Label descriptor for table-driven parsing
-typedef struct {
-    const char *label;      // TIC label string
-    uint8_t data_len;       // Expected number of digits
-    const char *unit;       // Log unit string
-    uint16_t flag;          // Valid flag bit
-    uint16_t offset;        // offsetof() into linky_data_t
-    uint8_t field_size;     // sizeof field: 2 (uint16_t) or 4 (uint32_t)
-} linky_label_t;
-
-// Helper: offsetof + sizeof a linky_data_t member in one macro
-#define FIELD(member) (uint16_t)offsetof(linky_data_t, member), (uint8_t)sizeof(((linky_data_t *)0)->member)
-
-static const linky_label_t linky_labels[] = {
-    { LABEL_IINST, 3, "A",  LINKY_FLAG_IINST, FIELD(iinst) },
-#if defined(CONFIG_LINKEY_TARIFF_HPHC)
-    { LABEL_HCHC,  9, "Wh", LINKY_FLAG_HCHC,  FIELD(hchc) },
-    { LABEL_HCHP,  9, "Wh", LINKY_FLAG_HCHP,  FIELD(hchp) },
-#elif defined(CONFIG_LINKEY_TARIFF_EJP)
-    { LABEL_EJPHN,  9, "Wh", LINKY_FLAG_EJPHN,  FIELD(ejphn) },
-    { LABEL_EJPHPM, 9, "Wh", LINKY_FLAG_EJPHPM, FIELD(ejphpm) },
-#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
-    { LABEL_BBRHCJB, 9, "Wh", LINKY_FLAG_BBRHCJB, FIELD(bbrhcjb) },
-    { LABEL_BBRHPJB, 9, "Wh", LINKY_FLAG_BBRHPJB, FIELD(bbrhpjb) },
-    { LABEL_BBRHCJW, 9, "Wh", LINKY_FLAG_BBRHCJW, FIELD(bbrhcjw) },
-    { LABEL_BBRHPJW, 9, "Wh", LINKY_FLAG_BBRHPJW, FIELD(bbrhpjw) },
-    { LABEL_BBRHCJR, 9, "Wh", LINKY_FLAG_BBRHCJR, FIELD(bbrhcjr) },
-    { LABEL_BBRHPJR, 9, "Wh", LINKY_FLAG_BBRHPJR, FIELD(bbrhpjr) },
-#else // BASE
-    { LABEL_BASE, 9, "Wh", LINKY_FLAG_BASE, FIELD(base) },
-#endif
-    { LABEL_PAPP, 5, "VA", LINKY_FLAG_PAPP, FIELD(papp) },
-    { LABEL_ADPS, 3, "A",  LINKY_FLAG_ADPS, FIELD(adps) },
-};
-
-#define LINKY_LABELS_COUNT (sizeof(linky_labels) / sizeof(linky_labels[0]))
-
-// Process received message
-static void process_message(const char *msg, int len, linky_data_t *data) {
-    DEBUG_LOG(TAG, "RX (%d): %s", len, msg);
-
-    // Validate checksum first
-    if (!validate_checksum(msg, len)) {
-        DEBUG_LOGW(TAG, "Invalid checksum");
-        return;
-    }
-
-    // Skip leading separator
-    while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-
-    // Match against known labels
-    for (int i = 0; i < (int)LINKY_LABELS_COUNT; i++) {
-        const linky_label_t *lbl = &linky_labels[i];
-        if (!str_starts_with(msg, lbl->label)) continue;
-
-        msg += strlen(lbl->label);
-        while (*msg == LINKY_TIC_GROUP_SEP) msg++;
-
-        int len_parsed = 0;
-        uint32_t val = parse_uint(msg, &len_parsed);
-        if (len_parsed != lbl->data_len) return;
-
-        DEBUG_LOG(TAG, "%s: %lu %s", lbl->label, val, lbl->unit);
-
-        if (lbl->field_size == 2) {
-            *(uint16_t *)((char *)data + lbl->offset) = (uint16_t)val;
-        } else {
-            *(uint32_t *)((char *)data + lbl->offset) = val;
-        }
-        data->valid_flags |= lbl->flag;
-        return;
-    }
-}
 
 void init_ulp_linky(void)
 {
@@ -268,28 +143,12 @@ void get_linky_data(linky_data_t *data)
 
     if (len < 2 || frame[0] != LINKY_TIC_FRAME_START) {
         DEBUG_LOGW(TAG, "No valid frame (len=%d, first=0x%02x)", len, len > 0 ? (unsigned char)frame[0] : 0);
-        return;  // Partial or empty frame — skip
+        return;
     }
 
 #ifdef CONFIG_LINKEY_DEBUG_LOGS
-    // Dump raw hex
     ESP_LOG_BUFFER_HEX(TAG, frame, len);
 #endif
 
-    // Extract and process each data group from the frame
-    // Frame format: STX [LF LABEL HT DATA HT CS CR] [LF ...] ...
-    int i = 1;  // Skip STX (0x02)
-    while (i < len) {
-        if (frame[i] == LINKY_TIC_GROUP_START) {
-            i++;  // Skip LF (start of data group)
-            int start = i;
-            // Find next LF or end of frame
-            while (i < len && frame[i] != LINKY_TIC_GROUP_START) i++;
-            if (i > start) {
-                process_message(&frame[start], i - start, data);
-            }
-        } else {
-            i++;
-        }
-    }
+    tic_parse_frame(frame, len, data);
 }
