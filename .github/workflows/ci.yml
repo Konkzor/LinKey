@@ -44,17 +44,9 @@ jobs:
           . $IDF_PATH/export.sh
           idf.py build
 
-      - name: Upload firmware build
-        uses: actions/upload-artifact@v6
-        with:
-          name: firmware-build
-          path: Firmware/build
-          retention-days: 7
-
   boot-smoke:
     name: QEMU boot smoke
     runs-on: ubuntu-latest
-    needs: firmware-build
     container: espressif/idf:release-v5.4
     steps:
       - name: Checkout
@@ -62,17 +54,18 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download firmware build
-        uses: actions/download-artifact@v4
-        with:
-          name: firmware-build
-          path: Firmware/build
-
       - name: Install QEMU (xtensa)
         shell: bash
         run: |
           . $IDF_PATH/export.sh
           python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
+
+      - name: Build firmware
+        shell: bash
+        working-directory: Firmware
+        run: |
+          . $IDF_PATH/export.sh
+          idf.py build
 
       - name: Run firmware in QEMU
         shell: bash
@@ -82,7 +75,7 @@ jobs:
           eval "$(python "$IDF_PATH/tools/idf_tools.py" export)"
           set +e
           # Boot for ~20s. -no-reboot stops the VM on panic instead of looping.
-          # idf.py qemu already appends -nographic -serial mon:stdio.
+          # idf.py qemu re-runs ninja first; with a warm build it's a no-op.
           timeout --preserve-status 20s \
             idf.py qemu --qemu-extra-args="-no-reboot" \
             > qemu.log 2>&1
