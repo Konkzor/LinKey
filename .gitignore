@@ -17,6 +17,7 @@ Firmware/build/
 Firmware/sdkconfig*
 !Firmware/sdkconfig.defaults
 Firmware/.cache/
+qemu.log
 
 # VS Code
 .vscode/
