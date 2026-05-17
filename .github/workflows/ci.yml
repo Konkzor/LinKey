@@ -61,7 +61,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: drc-report
+          name: LinKey-drc
           path: PCB/LinKey-drc.json
 
   pcb-fab:
@@ -74,13 +74,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Generate fab files                                                    
-        working-directory: PCB                                                      
+      - name: Compute PCB version from git tag
+        id: pcbver
+        run: |
+          raw=$(git describe --tags --match 'pcb-v*' 2>/dev/null || true)
+          if [ -z "$raw" ]; then
+            echo "No pcb-v* tag reachable from HEAD. Create one (e.g. 'git tag pcb-v1.0 <commit> && git push --tags') so fab artifacts can be versioned." >&2
+            exit 1
+          fi
+          version="${raw#pcb-}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Inject PCB_VERSION into project for silkscreen
+        working-directory: PCB
+        env:
+          VERSION: ${{ steps.pcbver.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          p = "LinKey.kicad_pro"
+          d = json.load(open(p))
+          d.setdefault("text_variables", {})["PCB_VERSION"] = os.environ["VERSION"]
+          json.dump(d, open(p, "w"), indent=2)
+          PY
+
+      - name: Generate fab files
+        working-directory: PCB
         run: kicad-cli jobset run --stop-on-error -f fab-output.kicad_jobset LinKey.kicad_pro
-      
+
       - name: Upload fab artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: fab
+          name: LinKey-pcb-${{ steps.pcbver.outputs.version }}-fab
           path: PCB/fab-output/

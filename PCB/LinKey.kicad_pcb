@@ -141,6 +141,7 @@
 			(outputdirectory "Gerber/")
 		)
 	)
+	(property "PCB_VERSION" "UNCONTROLLED")
 	(net 0 "")
 	(net 1 "GND")
 	(net 2 "VDD")
@@ -1931,7 +1932,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "05872e1f-6e77-4905-9405-47254081cf1c")
 		)
 		(pad "39" smd rect
 			(at -2.9 2.46)
@@ -1942,7 +1943,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "17fa510e-43c0-483c-892e-e24dfaf2f448")
 		)
 		(pad "39" thru_hole circle
 			(at -2.9 3.16)
@@ -1955,7 +1956,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "ecf6ba52-5ebe-4b02-adfc-dd4aff83a787")
 		)
 		(pad "39" smd rect
 			(at -2.9 3.86)
@@ -1966,7 +1967,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "8d3fd9cd-1206-4bb8-8e2a-5cb71fbbb916")
 		)
 		(pad "39" thru_hole circle
 			(at -2.2 1.06)
@@ -1979,7 +1980,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "9ae41065-7bd0-42cf-bcd3-198864724fd6")
 		)
 		(pad "39" thru_hole circle
 			(at -2.2 2.46)
@@ -1992,7 +1993,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "993381a0-c9a8-4017-a971-6588a917bf75")
 		)
 		(pad "39" thru_hole circle
 			(at -2.2 3.86)
@@ -2005,7 +2006,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "2bc86976-e879-4525-a54b-5d80b9a21c49")
 		)
 		(pad "39" smd rect
 			(at -1.5 1.06)
@@ -2016,7 +2017,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "a01c90bd-3ac8-4f69-8c8d-a17508a429b3")
 		)
 		(pad "39" thru_hole circle
 			(at -1.5 1.76)
@@ -2029,7 +2030,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "1e2b3e2f-cabc-46f6-9bc4-85ad4d471aef")
 		)
 		(pad "39" smd rect
 			(at -1.5 2.46)
@@ -2040,7 +2041,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "bb5aaeac-5624-4917-afb5-767f8f9e13eb")
 		)
 		(pad "39" thru_hole circle
 			(at -1.5 3.16)
@@ -2053,7 +2054,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "47ad20ef-a665-4dae-b3be-1ad5729dc711")
 		)
 		(pad "39" smd rect
 			(at -1.5 3.86)
@@ -2064,7 +2065,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "8eb18d7e-79e9-4a9f-956e-b2abb4bcad2f")
 		)
 		(pad "39" thru_hole circle
 			(at -0.8 1.06)
@@ -2077,7 +2078,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "8f200bab-1073-4017-bef4-f7784768bace")
 		)
 		(pad "39" thru_hole circle
 			(at -0.8 2.46)
@@ -2090,7 +2091,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "039e4b97-29c8-4129-b2cd-fb76fc60c005")
 		)
 		(pad "39" thru_hole circle
 			(at -0.8 3.86)
@@ -2103,7 +2104,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "e5882fbd-037e-46e1-a41b-ced7a85bcf46")
 		)
 		(pad "39" smd rect
 			(at -0.1 1.06)
@@ -2114,7 +2115,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "83c8401a-4cad-488a-a3a0-9c16792be05c")
 		)
 		(pad "39" thru_hole circle
 			(at -0.1 1.76)
@@ -2127,7 +2128,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "49a92d83-1740-4164-a669-58ff87d16aed")
 		)
 		(pad "39" smd rect
 			(at -0.1 2.46)
@@ -2138,7 +2139,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "9f0c581f-2bc2-448a-9ed5-70e281bc0575")
 		)
 		(pad "39" thru_hole circle
 			(at -0.1 3.16)
@@ -2151,7 +2152,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "c59cbd01-6e42-46a8-a133-eee6c910084c")
 		)
 		(pad "39" smd rect
 			(at -0.1 3.86)
@@ -2162,7 +2163,7 @@
 			(pinfunction "GND")
 			(pintype "passive")
 			(zone_connect 2)
-			(uuid "a7b888f5-6063-4072-944d-07c2ca7b32e3")
+			(uuid "dfab275e-ec00-4f70-b05f-7ee0fa306368")
 		)
 		(zone
 			(net 0)
@@ -5408,7 +5409,7 @@
 		(descr "Capacitor SMD 0603 (1608 Metric), square (rectangular) end terminal, IPC-7351 nominal with elongated pad for handsoldering. (Body size source: IPC-SM-782 page 76, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf), generated with kicad-footprint-generator")
 		(tags "capacitor handsolder")
 		(property "Reference" "C8"
-			(at -2.45 0 0)
+			(at -1.15 1.81 0)
 			(layer "B.SilkS")
 			(uuid "0c0c3b37-71b6-43b2-a71f-c76bc0588228")
 			(effects
@@ -6699,7 +6700,7 @@
 		(descr "CP, Radial series, Radial, pin pitch=3.50mm, diameter=8mm, height=12mm, Electrolytic Capacitor")
 		(tags "CP Radial series Radial pin pitch 3.50mm diameter 8mm height 12mm Electrolytic Capacitor")
 		(property "Reference" "C2"
-			(at 4.85 4.65 180)
+			(at 3.65 5 180)
 			(layer "B.SilkS")
 			(uuid "5a0f90d3-0202-4d3f-a467-e50c03eec2e7")
 			(effects
@@ -13793,16 +13794,6 @@
 		)
 	)
 	(gr_line
-		(start 161 79.1)
-		(end 160.8 78.9)
-		(stroke
-			(width 0.1)
-			(type default)
-		)
-		(layer "B.SilkS")
-		(uuid "52ba3f04-c740-4636-a753-f28b8db32285")
-	)
-	(gr_line
 		(start 157.7 78.9)
 		(end 157.47 78.61)
 		(stroke
@@ -13823,24 +13814,14 @@
 		(uuid "cbec285c-9e65-477c-ae67-13c0017ffc47")
 	)
 	(gr_line
-		(start 141.3 62.2)
-		(end 166.3 62.2)
+		(start 161 79.1)
+		(end 160.8 78.9)
 		(stroke
-			(width 0.16)
-			(type solid)
+			(width 0.1)
+			(type default)
 		)
-		(layer "Edge.Cuts")
-		(uuid "470f935a-a137-4f3e-8a1e-a09802efe32e")
-	)
-	(gr_line
-		(start 166.3 91.5)
-		(end 159 91.5)
-		(stroke
-			(width 0.16)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "620a0138-6770-4168-b217-71b6e274e457")
+		(layer "B.SilkS")
+		(uuid "52ba3f04-c740-4636-a753-f28b8db32285")
 	)
 	(gr_line
 		(start 141.3 62.2)
@@ -13851,6 +13832,16 @@
 		)
 		(layer "Edge.Cuts")
 		(uuid "6487c03a-fdb7-41ae-afa1-ec47c470a603")
+	)
+	(gr_line
+		(start 141.3 62.2)
+		(end 166.3 62.2)
+		(stroke
+			(width 0.16)
+			(type solid)
+		)
+		(layer "Edge.Cuts")
+		(uuid "470f935a-a137-4f3e-8a1e-a09802efe32e")
 	)
 	(gr_line
 		(start 158 92.5)
@@ -13874,16 +13865,6 @@
 		(uuid "8776c4cd-3de1-4ac2-b04f-10113404881f")
 	)
 	(gr_line
-		(start 166.3 62.2)
-		(end 166.3 91.5)
-		(stroke
-			(width 0.16)
-			(type solid)
-		)
-		(layer "Edge.Cuts")
-		(uuid "b2b5baf5-f5d9-4524-9a1b-c90c822db28a")
-	)
-	(gr_line
 		(start 158 99.5)
 		(end 141.3 99.5)
 		(stroke
@@ -13894,14 +13875,24 @@
 		(uuid "b5e6c252-aa04-4c89-9ef0-50de9c8a76ee")
 	)
 	(gr_line
-		(start 166.3 56)
+		(start 166.3 62.2)
 		(end 166.3 91.5)
 		(stroke
 			(width 0.16)
 			(type solid)
 		)
-		(layer "User.4")
-		(uuid "880425ac-2fda-45c6-b886-25e80675b4f7")
+		(layer "Edge.Cuts")
+		(uuid "b2b5baf5-f5d9-4524-9a1b-c90c822db28a")
+	)
+	(gr_line
+		(start 166.3 91.5)
+		(end 159 91.5)
+		(stroke
+			(width 0.16)
+			(type solid)
+		)
+		(layer "Edge.Cuts")
+		(uuid "620a0138-6770-4168-b217-71b6e274e457")
 	)
 	(gr_line
 		(start 141.3 59)
@@ -13934,10 +13925,20 @@
 		(layer "User.4")
 		(uuid "ceea33f8-ad3f-492a-a9ab-7e209b6b3d8e")
 	)
-	(gr_text "R"
-		(at 164.75 70.15 0)
+	(gr_line
+		(start 166.3 56)
+		(end 166.3 91.5)
+		(stroke
+			(width 0.16)
+			(type solid)
+		)
+		(layer "User.4")
+		(uuid "880425ac-2fda-45c6-b886-25e80675b4f7")
+	)
+	(gr_text "A"
+		(at 144 99 0)
 		(layer "F.SilkS")
-		(uuid "03cea82b-27e9-4082-b606-767df0f9c809")
+		(uuid "d96dccc3-a8e4-4f06-9a9a-26a39bfc2379")
 		(effects
 			(font
 				(size 1 1)
@@ -13946,10 +13947,10 @@
 			(justify left bottom)
 		)
 	)
-	(gr_text "-"
-		(at 164.630953 72.683333 0)
+	(gr_text "I2"
+		(at 148.9 99 0)
 		(layer "F.SilkS")
-		(uuid "109e983b-639c-4d33-959a-cbe7f4e78d99")
+		(uuid "b8d2b7f4-294b-43f2-bbeb-3c6dc47bf7bf")
 		(effects
 			(font
 				(size 1 1)
@@ -13994,6 +13995,30 @@
 			(justify left bottom)
 		)
 	)
+	(gr_text "-"
+		(at 164.630953 72.683333 0)
+		(layer "F.SilkS")
+		(uuid "109e983b-639c-4d33-959a-cbe7f4e78d99")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+			(justify left bottom)
+		)
+	)
+	(gr_text "R"
+		(at 164.75 70.15 0)
+		(layer "F.SilkS")
+		(uuid "03cea82b-27e9-4082-b606-767df0f9c809")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+			(justify left bottom)
+		)
+	)
 	(gr_text "T"
 		(at 164.869048 67.616666 0)
 		(layer "F.SilkS")
@@ -14006,32 +14031,8 @@
 			(justify left bottom)
 		)
 	)
-	(gr_text "I2"
-		(at 148.9 99 0)
-		(layer "F.SilkS")
-		(uuid "b8d2b7f4-294b-43f2-bbeb-3c6dc47bf7bf")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify left bottom)
-		)
-	)
-	(gr_text "A"
-		(at 144 99 0)
-		(layer "F.SilkS")
-		(uuid "d96dccc3-a8e4-4f06-9a9a-26a39bfc2379")
-		(effects
-			(font
-				(size 1 1)
-				(thickness 0.15)
-			)
-			(justify left bottom)
-		)
-	)
-	(gr_text "Linkey ESP32\n02.2026\nv1.1"
-		(at 162.1 70.8 0)
+	(gr_text "Linkey\n${PCB_VERSION}"
+		(at 162.42 65.77 0)
 		(layer "B.SilkS")
 		(uuid "646d98f6-a329-49eb-8cc2-19fd1fdd8abf")
 		(effects
@@ -14039,7 +14040,7 @@
 				(size 1 1)
 				(thickness 0.15)
 			)
-			(justify left bottom mirror)
+			(justify left top mirror)
 		)
 	)
 	(gr_text "RST"

@@ -667,5 +667,7 @@
       "Root"
     ]
   ],
-  "text_variables": {}
+  "text_variables": {
+    "PCB_VERSION": "UNCONTROLLED"
+  }
 }

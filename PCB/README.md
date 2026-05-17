@@ -6,7 +6,15 @@
 
 Sources matérielles de la carte LinKey : projet KiCad, Gerbers et nomenclature.
 
-Révision actuelle : **v1.1**.
+
+> [!NOTE]
+> La révision PCB est portée par les **tags git** `pcb-v*` (ex. `pcb-v1.0`). C'est la **source unique** : la CI dérive la version d'`git describe --tags --match 'pcb-v*'` et l'injecte à la fois dans le nom de l'artefact (`LinKey-pcb-<version>-fab`) et dans la variable de projet `PCB_VERSION` (Board Setup → Text Variables) pour que la sérigraphie `${PCB_VERSION}` reflète exactement l'état du dépôt :
+>
+> | Build | `${PCB_VERSION}` et nom d'artefact |
+> |-------|------------------------------------|
+> | Local (export manuel depuis KiCad) | `UNCONTROLLED` — valeur fixée en dur dans [`LinKey.kicad_pro`](LinKey.kicad_pro), signale que les fichiers de fab n'ont pas été produits par la CI et ne doivent pas être utilisés |
+> | CI hors tag | `vX.Y-N-gSHA` (tag le plus récent + commits depuis + hash court) |
+> | CI sur un tag `pcb-vX.Y` | `vX.Y` |
 
 ## Couche physique de la TIC Linky
 
@@ -125,9 +133,9 @@ Convertit la tension variable du supercondensateur (0 V → 2,7 V) en un rail 3,
 
 ## Fabrication
 
-Les fichiers de fabrication ne sont **pas versionnés** : ils sont régénérés à chaque push par le workflow GitHub Actions [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (job `pcb-fab`) à partir du jobset [`fab-output.kicad_jobset`](fab-output.kicad_jobset), et publiés en tant qu'artefact nommé **`fab`** sur l'exécution correspondante.
+Les fichiers de fabrication ne sont **pas versionnés** : ils sont régénérés à chaque push par le workflow GitHub Actions [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (job `pcb-fab`) à partir du jobset [`fab-output.kicad_jobset`](fab-output.kicad_jobset), et publiés en tant qu'artefact nommé **`LinKey-pcb-<PCB_VERSION>-fab`** sur l'exécution correspondante (la version provient de la variable de projet `PCB_VERSION` — cf. note en haut de ce README).
 
-Contenu de l'artefact `fab` :
+Contenu de l'artefact :
 
 | Fichier | Description |
 |---------|-------------|
@@ -141,7 +149,7 @@ Contenu de l'artefact `fab` :
 | `LinKey_positions-all.csv` | Fichier de positions (pick & place) |
 | `LinKey_Bill_of_Materials.csv` | Nomenclature (BOM) |
 
-Pour récupérer l'archive : ouvrir l'exécution CI sur GitHub → onglet *Summary* → section *Artifacts* → **`fab`**.
+Pour récupérer l'archive : ouvrir l'exécution CI sur GitHub → onglet *Summary* → section *Artifacts* → **`LinKey-pcb-<PCB_VERSION>-fab`**.
 
 ## Consommation
 
