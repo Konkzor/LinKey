@@ -76,11 +76,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Compute PCB version from git tag
         id: pcbver
         run: |
-          raw=$(git describe --tags --match 'pcb-v*' 2>/dev/null || true)
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          raw=$(git describe --tags --match 'pcb-v*' || true)
           if [ -z "$raw" ]; then
             echo "No pcb-v* tag reachable from HEAD. Create one (e.g. 'git tag pcb-v1.0 <commit> && git push --tags') so fab artifacts can be versioned." >&2
             exit 1
