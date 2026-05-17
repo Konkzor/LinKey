@@ -25,10 +25,10 @@ LinKey (jeu de mot) lit la sortie série TIC (Télé-Information Client) du Link
 
 ```
 .
+├── CAO/        Boîtier imprimable 3D (source STEP + modèle Onshape)
 ├── Doc/        Spécification TIC Linky et documents de référence
 ├── Firmware/   Projet ESP-IDF (ULP + machine d'état CPU, WiFi/MQTT)
 └── PCB/        Projet KiCad, schéma, Gerbers
-└── CAO/        Fichiers 3D du boitier (à venir)
 
 ```
 
@@ -36,6 +36,7 @@ LinKey (jeu de mot) lit la sortie série TIC (Télé-Information Client) du Link
 
 - [Guide du firmware](Firmware/README.md) — compilation, flashage, configuration, topics MQTT, découverte HA
 - [Guide de la carte (PCB)](PCB/README.md) — composants, brochage ESP32, connexion TIC, fabrication
+- [Guide du boîtier (CAO)](CAO/README.md) — source Onshape, STEP, paramètres d'impression
 - [Spécification TIC Linky](Doc/Enedis-MOP-CPT_002E.pdf) — document de référence Enedis
 
 ## Firmware
@@ -63,13 +64,22 @@ Le PCB a été réalisé sous KiCad 9.
 Les sources de la carte se trouvent dans [`PCB/`](PCB/). Voir [`PCB/README.md`](PCB/README.md) pour une description des composants, le brochage de l'ESP32 et la connexion TIC.
 
 - Projet KiCad : [`PCB/LinKey.kicad_pro`](PCB/LinKey.kicad_pro)
-- Fichiers de fabrication : [`PCB/Gerber/`](PCB/Gerber/)
 - Modèles 3D de certains composants : [`PCB/MCAD files/`](PCB/MCAD%20files/)
-- Nomenclature : [`PCB/LinKey.csv`](PCB/LinKey.csv)
+
+> Note : Les fichiers de fabrication et la nomenclature ne sont pas versionnés dans le repo. Ils sont disponibles en artefacts des jobs de la CI ainsi que dans la [page Releases](https://github.com/Konkzor/LinKey/releases) pour les versions taguées.
 
 ## CAO
 
-A venir.
+Le boîtier est conçu sous Onshape et imprimable en 3D.
+
+<p align="center">
+  <img src="Doc/images/image_render_boitier_v2.png" alt="Rendu 3D du boîtier LinKey v2" width="200">
+</p>
+
+Les sources se trouvent dans [`CAO/`](CAO/). Voir [`CAO/README.md`](CAO/README.md) pour le lien vers le modèle Onshape et les paramètres d'impression conseillés.
+
+- Source CAO neutre (STEP) ;
+- Fichiers prêts à imprimer (3MF multicolore, STL mono-couleur) : [page Releases](https://github.com/Konkzor/LinKey/releases).
 
 ## Licence
 
