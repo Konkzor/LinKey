@@ -11,6 +11,7 @@
 #include "driver/gpio.h"
 #include "esp_timer.h"
 #include "types.h"
+#include "fsm.h"
 #include "ulp_linky.h"
 #include "voltage_manager.h"
 #include "wifi_manager.h"
@@ -58,16 +59,6 @@ static const char *TAG = "LINKY_MAIN";
 #define ULP_DATA_TIMEOUT_MS     3000
 #endif
 #define POLL_INTERVAL_MS        100     // Polling interval in connect/wait loops
-
-// FSM States
-typedef enum {
-    STATE_INIT,
-    STATE_WAIT_VOLTAGE,
-    STATE_WIFI_CONNECT,
-    STATE_MQTT_CONNECT,
-    STATE_WAIT_ULP_DATA,
-    STATE_PUBLISH_DATA
-} app_state_t;
 
 static app_state_t current_state = STATE_INIT;
 
@@ -242,23 +233,15 @@ static app_state_t handle_state_wifi_connect(void)
     conn_result_t result = wifi_connect(&wifi_state, voltage_is_low,
                                         VOLTAGE_FALLBACK_MIN_MV,
                                         WIFI_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
-    switch (result) {
-        case CONN_OK:
-            DEBUG_LOG(TAG, "WiFi connected - proceeding to MQTT init");
-            return STATE_MQTT_CONNECT;
-
-        case CONN_FAILED:
-        case CONN_WIFI_LOST:
-            DEBUG_LOG(TAG, "WiFi connection failed - retrying...");
-            return STATE_WIFI_CONNECT;
-
-        case CONN_VOLTAGE_LOW:
-            DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            stop_all_connections();
-            return STATE_WAIT_VOLTAGE;
+    if (result == CONN_VOLTAGE_LOW) {
+        DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
+        stop_all_connections();
+    } else if (result == CONN_OK) {
+        DEBUG_LOG(TAG, "WiFi connected - proceeding to MQTT init");
+    } else {
+        DEBUG_LOG(TAG, "WiFi connection failed - retrying...");
     }
-
-    return STATE_WIFI_CONNECT;  // Should not reach here
+    return fsm_after_wifi_connect(result);
 }
 
 // STATE_MQTT_CONNECT: Initialize MQTT (once) and connect
@@ -275,27 +258,17 @@ static app_state_t handle_state_mqtt_connect(void)
     conn_result_t result = mqtt_connect(&mqtt_state, voltage_is_low_dynamic,
                                         VOLTAGE_FALLBACK_MIN_MV, wifi_is_connected,
                                         MQTT_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
-    switch (result) {
-        case CONN_OK:
-            DEBUG_LOG(TAG, "MQTT connected - proceeding to ULP_WAIT_DATA");
-            return STATE_WAIT_ULP_DATA;
-
-        case CONN_FAILED:
-            DEBUG_LOG(TAG, "MQTT not available - retrying...");
-            return STATE_MQTT_CONNECT;
-
-        case CONN_VOLTAGE_LOW:
-            DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            stop_all_connections();
-            return STATE_WAIT_VOLTAGE;
-        
-        case CONN_WIFI_LOST:
-            DEBUG_LOGW(TAG, "WiFi lost during MQTT connect - returning to WIFI_CONNECT");
-            stop_all_connections();
-            return STATE_WIFI_CONNECT;
+    if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
+        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+            ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
+            : "WiFi lost during MQTT connect - returning to WIFI_CONNECT");
+        stop_all_connections();
+    } else if (result == CONN_OK) {
+        DEBUG_LOG(TAG, "MQTT connected - proceeding to ULP_WAIT_DATA");
+    } else {
+        DEBUG_LOG(TAG, "MQTT not available - retrying...");
     }
-
-    return STATE_MQTT_CONNECT;  // Should not reach here
+    return fsm_after_mqtt_connect(result);
 }
 
 // STATE_WAIT_ULP_DATA: Initialize ULP (once) and wait for data
@@ -314,74 +287,55 @@ static app_state_t handle_state_wait_ulp_data(void)
     DEBUG_LOG(TAG, "Waiting for ULP data...");
 
     conn_result_t result = ulp_wait_data();
-    switch (result) {
-        case CONN_OK:
-            DEBUG_LOG(TAG, "ULP data confirmed - entering PUBLISH_DATA state");
-            return STATE_PUBLISH_DATA;
-
-        case CONN_FAILED:
-            DEBUG_LOG(TAG, "ULP data not received - waiting...");
-            return STATE_WAIT_ULP_DATA;
-
-        case CONN_VOLTAGE_LOW:
-            DEBUG_LOGW(TAG, "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE");
-            stop_all_connections();
-            return STATE_WAIT_VOLTAGE;
-        
-        case CONN_WIFI_LOST:
-            DEBUG_LOGW(TAG, "WiFi or MQTT lost during ULP wait - returning to WIFI_CONNECT");
-            stop_all_connections();
-            return STATE_WIFI_CONNECT;
+    if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
+        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+            ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
+            : "WiFi or MQTT lost during ULP wait - returning to WIFI_CONNECT");
+        stop_all_connections();
+    } else if (result == CONN_OK) {
+        DEBUG_LOG(TAG, "ULP data confirmed - entering PUBLISH_DATA state");
+    } else {
+        DEBUG_LOG(TAG, "ULP data not received - waiting...");
     }
-
-    return STATE_WAIT_ULP_DATA;  // Should not reach here
+    return fsm_after_wait_ulp_data(result);
 }
 
 // STATE_PUBLISH_DATA: Normal operation - get data and publish
 static app_state_t handle_state_publish_data(void)
 {
     linky_data_t linky_data;
+    bool data_valid = false;
+    bool publish_ok = false;
 
-    // Check voltage (global check already done in main loop, but double-check here)
-    if (voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV)) {
-        stop_all_connections();
-        return STATE_WAIT_VOLTAGE;
-    }
+    // Short-circuit guards preserve the original call ordering: each
+    // downstream check is only evaluated when its precondition holds.
+    bool v_low   = voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
+    bool wifi_ok = !v_low   && wifi_is_connected();
+    bool mqtt_ok =  wifi_ok && mqtt_is_connected(&mqtt_state);
 
-    // Check WiFi connection
-    if (!wifi_is_connected()) {
+    if (mqtt_ok) {
+        get_linky_data(&linky_data);
+        linky_data.voltage_cap = voltage_read_mv();
+        linky_data.uptime_s = (uint32_t)(esp_timer_get_time() / 1000000);
+        data_valid = (linky_data.valid_flags != 0);
+        if (data_valid) {
+            DEBUG_LOG(TAG, "Linky data received (flags: 0x%04x, IINST: %u A)",
+                    linky_data.valid_flags, linky_data.iinst);
+            publish_ok = mqtt_publish_linky_data(&mqtt_state, &linky_data);
+            if (!publish_ok) {
+                DEBUG_LOGW(TAG, "Publish failed - returning to MQTT_CONNECT");
+            }
+        } else {
+            DEBUG_LOGW(TAG, "No ULP data received - returning to WAIT_ULP_DATA");
+        }
+    } else if (!wifi_ok && !v_low) {
         DEBUG_LOGW(TAG, "WiFi disconnected - returning to WIFI_CONNECT");
-        stop_all_connections();
-        return STATE_WIFI_CONNECT;
-    }
-
-    // Check MQTT connection
-    if (!mqtt_is_connected(&mqtt_state)) {
+    } else if (wifi_ok) {
         DEBUG_LOGW(TAG, "MQTT disconnected - returning to MQTT_CONNECT");
-        return STATE_MQTT_CONNECT;
     }
 
-    // Get data from ULP
-    get_linky_data(&linky_data);
-    linky_data.voltage_cap = voltage_read_mv();
-    linky_data.uptime_s = (uint32_t)(esp_timer_get_time() / 1000000);
-
-    // Check if data received
-    if (linky_data.valid_flags == 0) {
-        DEBUG_LOGW(TAG, "No ULP data received - returning to WAIT_ULP_DATA");
-        return STATE_WAIT_ULP_DATA;
-    }
-
-    DEBUG_LOG(TAG, "Linky data received (flags: 0x%04x, IINST: %u A)",
-            linky_data.valid_flags, linky_data.iinst);
-
-    // Publish data
-    if (!mqtt_publish_linky_data(&mqtt_state, &linky_data)) {
-        DEBUG_LOGW(TAG, "Publish failed - returning to MQTT_CONNECT");
-        return STATE_MQTT_CONNECT;
-    }
-
-    return STATE_PUBLISH_DATA;
+    if (v_low || !wifi_ok) stop_all_connections();
+    return fsm_after_publish_data(v_low, wifi_ok, mqtt_ok, data_valid, publish_ok);
 }
 
 void app_main(void)
@@ -392,25 +346,23 @@ void app_main(void)
     while (1) {
         // Reset dynamic peak tracker on state transitions into dynamic states
         if (current_state != previous_state) {
-            if (current_state == STATE_MQTT_CONNECT ||
-                current_state == STATE_WAIT_ULP_DATA ||
-                current_state == STATE_PUBLISH_DATA) {
+            if (fsm_should_reset_peak_on_enter(current_state)) {
                 voltage_reset_peak();
             }
             previous_state = current_state;
         }
 
-        // Voltage check only possible after INIT (ADC must be initialized first)
+        // Voltage check only possible after INIT (ADC must be initialized first).
+        // STATE_WIFI_CONNECT uses the fixed floor (peak hasn't been built up yet);
+        // every other connected state uses the dynamic drop-from-peak threshold.
         if (current_state != STATE_INIT && current_state != STATE_WAIT_VOLTAGE) {
-            bool low = false;
-            if (current_state == STATE_WIFI_CONNECT) {
-                low = voltage_is_low(VOLTAGE_FALLBACK_MIN_MV);
-            } else {
-                low = voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
-            }
-            if (low) {
+            bool low = (current_state == STATE_WIFI_CONNECT)
+                ? voltage_is_low(VOLTAGE_FALLBACK_MIN_MV)
+                : voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
+            app_state_t next = fsm_voltage_watchdog_next(current_state, low);
+            if (next != current_state) {
                 stop_all_connections();
-                current_state = STATE_WAIT_VOLTAGE;
+                current_state = next;
             }
         }
 

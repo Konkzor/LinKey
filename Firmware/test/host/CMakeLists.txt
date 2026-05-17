@@ -38,3 +38,11 @@ add_executable(test_tic_parser
 target_include_directories(test_tic_parser PRIVATE ${LINKEY_MAIN_DIR})
 target_link_libraries(test_tic_parser PRIVATE unity)
 add_test(NAME tic_parser COMMAND test_tic_parser)
+
+add_executable(test_main_fsm
+    test_main_fsm.c
+    ${LINKEY_MAIN_DIR}/fsm.c
+)
+target_include_directories(test_main_fsm PRIVATE ${LINKEY_MAIN_DIR})
+target_link_libraries(test_main_fsm PRIVATE unity)
+add_test(NAME main_fsm COMMAND test_main_fsm)
