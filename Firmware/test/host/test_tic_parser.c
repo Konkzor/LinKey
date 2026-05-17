@@ -199,6 +199,49 @@ static void test_parse_null_data_no_crash(void)
     // Pass: did not segfault.
 }
 
+static void test_parse_null_group_no_crash(void)
+{
+    tic_parse_group(NULL, 10, &data);
+    TEST_ASSERT_EQUAL_UINT16(0, data.valid_flags);
+}
+
+static void test_parse_value_shorter_than_expected(void)
+{
+    // IINST expects exactly 3 digits — give it 2.
+    char g[32];
+    int n = build_group(g, "IINST", "03");
+    tic_parse_group(g, n, &data);
+    TEST_ASSERT_EQUAL_UINT16(0, data.valid_flags);
+}
+
+static void test_parse_non_digit_in_value_rejected(void)
+{
+    // Build a group with a valid checksum but a non-digit in the value.
+    // parse_uint stops at the first non-digit, so the consumed-length
+    // check rejects it without writing to data.
+    char g[32];
+    int n = build_group(g, "IINST", "0A3");
+    tic_parse_group(g, n, &data);
+    TEST_ASSERT_EQUAL_UINT16(0, data.valid_flags);
+}
+
+static void test_parse_extra_separator_tolerated(void)
+{
+    // The parser skips runs of SP after the label, so an extra space
+    // between label and value should still parse.
+    char g[32];
+    int n = 0;
+    memcpy(g, "IINST", 5);             n += 5;
+    g[n++] = ' '; g[n++] = ' ';        // two separators instead of one
+    memcpy(g + n, "003", 3);           n += 3;
+    int controlled_len = n;
+    g[n++] = ' ';
+    g[n++] = compute_cs(g, controlled_len);
+    tic_parse_group(g, n, &data);
+    TEST_ASSERT_TRUE(data.valid_flags & LINKY_FLAG_IINST);
+    TEST_ASSERT_EQUAL_UINT16(3, data.iinst);
+}
+
 // --- tic_parse_frame -------------------------------------------------------
 
 static void test_frame_three_groups(void)
@@ -292,6 +335,43 @@ static void test_frame_no_lf_separators_returns_zero(void)
     TEST_ASSERT_EQUAL_INT(0, parsed);
 }
 
+static void test_frame_null_pointer_no_crash(void)
+{
+    int parsed = tic_parse_frame(NULL, 16, &data);
+    TEST_ASSERT_EQUAL_INT(0, parsed);
+    TEST_ASSERT_EQUAL_UINT16(0, data.valid_flags);
+}
+
+static void test_frame_only_stx_and_lf(void)
+{
+    // STX + LF with no payload bytes: i advances past the LF, the inner
+    // scan finds nothing (i == frame_len), so no group is emitted.
+    char frame[2] = { 0x02, 0x0A };
+    int parsed = tic_parse_frame(frame, sizeof(frame), &data);
+    TEST_ASSERT_EQUAL_INT(0, parsed);
+    TEST_ASSERT_EQUAL_UINT16(0, data.valid_flags);
+}
+
+static void test_frame_garbage_between_stx_and_lf_skipped(void)
+{
+    // Bytes that are neither LF nor part of a group are walked over
+    // without effect; the real group still parses.
+    char g[32];
+    int gn = build_group(g, "IINST", "004");
+
+    char frame[64];
+    int n = 0;
+    frame[n++] = 0x02;                       // STX
+    frame[n++] = 'X'; frame[n++] = 'Y';      // stray bytes before first LF
+    frame[n++] = 0x0A;                       // LF
+    memcpy(frame + n, g, gn); n += gn;
+    frame[n++] = 0x0D;                       // CR
+
+    int parsed = tic_parse_frame(frame, n, &data);
+    TEST_ASSERT_EQUAL_INT(1, parsed);
+    TEST_ASSERT_EQUAL_UINT16(4, data.iinst);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -315,6 +395,10 @@ int main(void)
     RUN_TEST(test_parse_wrong_length_rejected);
     RUN_TEST(test_parse_bad_checksum_rejected);
     RUN_TEST(test_parse_null_data_no_crash);
+    RUN_TEST(test_parse_null_group_no_crash);
+    RUN_TEST(test_parse_value_shorter_than_expected);
+    RUN_TEST(test_parse_non_digit_in_value_rejected);
+    RUN_TEST(test_parse_extra_separator_tolerated);
 
     RUN_TEST(test_frame_three_groups);
     RUN_TEST(test_frame_bad_checksum_skipped);
@@ -323,6 +407,9 @@ int main(void)
     RUN_TEST(test_frame_empty_returns_zero);
     RUN_TEST(test_frame_same_label_twice_last_wins);
     RUN_TEST(test_frame_no_lf_separators_returns_zero);
+    RUN_TEST(test_frame_null_pointer_no_crash);
+    RUN_TEST(test_frame_only_stx_and_lf);
+    RUN_TEST(test_frame_garbage_between_stx_and_lf_skipped);
 
     return UNITY_END();
 }
