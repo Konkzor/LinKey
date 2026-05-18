@@ -46,22 +46,17 @@ typedef struct {
 
 static const linky_label_t linky_labels[] = {
     { LABEL_IINST, 3, "A",  LINKY_FLAG_IINST, FIELD(iinst) },
-#if defined(CONFIG_LINKEY_TARIFF_HPHC)
+    { LABEL_BASE, 9, "Wh", LINKY_FLAG_BASE, FIELD(base) },
     { LABEL_HCHC,  9, "Wh", LINKY_FLAG_HCHC,  FIELD(hchc) },
     { LABEL_HCHP,  9, "Wh", LINKY_FLAG_HCHP,  FIELD(hchp) },
-#elif defined(CONFIG_LINKEY_TARIFF_EJP)
     { LABEL_EJPHN,  9, "Wh", LINKY_FLAG_EJPHN,  FIELD(ejphn) },
     { LABEL_EJPHPM, 9, "Wh", LINKY_FLAG_EJPHPM, FIELD(ejphpm) },
-#elif defined(CONFIG_LINKEY_TARIFF_TEMPO)
     { LABEL_BBRHCJB, 9, "Wh", LINKY_FLAG_BBRHCJB, FIELD(bbrhcjb) },
     { LABEL_BBRHPJB, 9, "Wh", LINKY_FLAG_BBRHPJB, FIELD(bbrhpjb) },
     { LABEL_BBRHCJW, 9, "Wh", LINKY_FLAG_BBRHCJW, FIELD(bbrhcjw) },
     { LABEL_BBRHPJW, 9, "Wh", LINKY_FLAG_BBRHPJW, FIELD(bbrhpjw) },
     { LABEL_BBRHCJR, 9, "Wh", LINKY_FLAG_BBRHCJR, FIELD(bbrhcjr) },
     { LABEL_BBRHPJR, 9, "Wh", LINKY_FLAG_BBRHPJR, FIELD(bbrhpjr) },
-#else // BASE
-    { LABEL_BASE, 9, "Wh", LINKY_FLAG_BASE, FIELD(base) },
-#endif
     { LABEL_PAPP, 5, "VA", LINKY_FLAG_PAPP, FIELD(papp) },
     { LABEL_ADPS, 3, "A",  LINKY_FLAG_ADPS, FIELD(adps) },
 };
