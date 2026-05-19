@@ -3,6 +3,7 @@
 </p>
 
 [![CI](https://github.com/Konkzor/LinKey/actions/workflows/ci.yml/badge.svg)](https://github.com/Konkzor/LinKey/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Konkzor/LinKey/branch/main/graph/badge.svg)](https://codecov.io/gh/Konkzor/LinKey)
 [![Firmware License: MIT](https://img.shields.io/badge/firmware-MIT-blue.svg)](Firmware/LICENSE)
 [![Hardware License: CERN-OHL-W-2.0](https://img.shields.io/badge/hardware-CERN--OHL--W--2.0-blue.svg)](LICENSE)
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.4-red.svg)](https://docs.espressif.com/projects/esp-idf/en/v5.4/)

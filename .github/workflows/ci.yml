@@ -16,16 +16,27 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake build-essential
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake build-essential gcovr
 
       - name: Configure
-        run: cmake -S Firmware/test/host -B Firmware/test/host/build
+        run: cmake -S Firmware/test/host -B Firmware/test/host/build -DENABLE_COVERAGE=ON
 
       - name: Build
         run: cmake --build Firmware/test/host/build
 
       - name: Run tests
         run: ctest --test-dir Firmware/test/host/build --output-on-failure
+
+      - name: Generate coverage report
+        run: gcovr --root Firmware/test/host --output Firmware/test/host/coverage.lcov --lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./Firmware/test/host/coverage.lcov
+          flags: host-tests
+          fail_ci_if_error: false
 
   firmware-build:
     name: ESP-IDF firmware build

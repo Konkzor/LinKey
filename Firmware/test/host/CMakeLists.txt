@@ -10,6 +10,12 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 
+# Coverage instrumentation
+if(ENABLE_COVERAGE)
+    add_compile_options(--coverage -O0)
+    add_link_options(--coverage)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
     unity
