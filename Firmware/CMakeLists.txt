@@ -4,6 +4,9 @@ cmake_minimum_required(VERSION 3.16)
 
 # Add HULP as a component
 set(EXTRA_COMPONENT_DIRS "HULP")
+if(LINKEY_QEMU_EMULATION)
+    list(APPEND EXTRA_COMPONENT_DIRS "emulation")
+endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(linky-ulp-monitor)

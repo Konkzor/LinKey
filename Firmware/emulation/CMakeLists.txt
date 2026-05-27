@@ -1,0 +1,19 @@
+idf_component_register(
+    SRCS "linkey_qemu_mocks.c"
+    INCLUDE_DIRS "." "../main"
+    REQUIRES main esp_eth esp_event esp_netif esp_pm HULP
+)
+
+if(NOT LINKEY_QEMU_TARIFF_OPTION)
+    set(LINKEY_QEMU_TARIFF_OPTION BASE)
+endif()
+
+string(TOUPPER "${LINKEY_QEMU_TARIFF_OPTION}" LINKEY_QEMU_TARIFF_OPTION_UPPER)
+
+if(NOT LINKEY_QEMU_TARIFF_OPTION_UPPER MATCHES "^(BASE|HPHC|EJP|TEMPO)$")
+    message(FATAL_ERROR "Invalid LINKEY_QEMU_TARIFF_OPTION: ${LINKEY_QEMU_TARIFF_OPTION}")
+endif()
+
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    LINKEY_QEMU_TARIFF_OPTION_${LINKEY_QEMU_TARIFF_OPTION_UPPER}=1
+)
