@@ -17,6 +17,36 @@ Le build d'émulation ajoute le composant `Firmware/emulation/` et wrappe les fo
 
 La configuration spécifique à QEMU est portée par `emulation/sdkconfig.qemu.defaults` et par l'option CMake `LINKEY_QEMU_EMULATION`.
 
+## Couverture d'émulation
+
+| Domaine | Élément | Statut | Commentaire |
+| --- | --- | --- | --- |
+| LINKY | Interface TIC historique | 🟡 | Format historique exercé par les trames mockées. |
+| LINKY | Interface TIC standard | 🔴 | Non supportée par le firmware actuel. |
+| LINKY | Trame TIC tarifaire BASE | 🟢 | Sélectionnée par défaut avec `--tariff_option base`. |
+| LINKY | Trame TIC tarifaire HPHC | 🟢 | Sélectionnée avec `--tariff_option hphc`. |
+| LINKY | Trame TIC tarifaire EJP | 🟢 | Sélectionnée avec `--tariff_option ejp`. |
+| LINKY | Trame TIC tarifaire TEMPO | 🟢 | Sélectionnée avec `--tariff_option tempo`. |
+| LINKY | Déconnexion / reconnexion TIC | 🔴 | Aucun scénario de perte TIC injecté aujourd'hui. |
+| LINKY | Données électriquement cohérentes | 🔴 | Trame constante; intensité, puissance et index ne forment pas un profil physique. |
+| Hardware / PCB | Interface TIC physique | 🔴 | Pas de validation optocoupleur, niveaux électriques, inversion ou bruit de ligne. |
+| Hardware / PCB | Tension supercondensateur | 🟡 | Lecture mockée à une valeur constante. |
+| Hardware / PCB | Profil charge / décharge supercondensateur | 🔴 | Pas de rampe ni de scénario brownout progressif. |
+| Hardware / PCB | Chemin basse tension firmware | 🟡 | Les fonctions sont appelées, mais avec une tension constante. |
+| Hardware / PCB | LED / GPIO de statut | 🟡 | Les GPIO sont initialisées par le firmware; aucune LED physique ou rendu visuel. |
+| ESP32 / firmware | Boot ESP32 | 🟢 | Exécuté sous QEMU avec image flash générée. |
+| ESP32 / firmware | FreeRTOS | 🟢 | Scheduler et tâches firmware réels. |
+| ESP32 / firmware | Logique applicative | 🟢 | FSM, parsing et publication utilisent le code firmware. |
+| ESP32 / firmware | MQTT | 🟢 | Client MQTT réel via la pile ESP-IDF; nécessite le broker local. |
+| ESP32 / firmware | Réseau | 🟡 | WiFi remplacé par QEMU OpenETH. |
+| ESP32 / firmware | Radio WiFi réelle | 🔴 | Pas d'association WiFi, RSSI, pertes radio ou credentials AP. |
+| ESP32 / firmware | ULP | 🟡 | Remplacé par une tâche FreeRTOS qui écrit les buffers RTC et notifie la tâche principale. |
+| ESP32 / firmware | Programme ULP réel | 🔴 | Le coprocesseur ULP et son programme assembleur ne sont pas exécutés. |
+| ESP32 / firmware | Power management / light sleep | 🔴 | `esp_pm_configure()` est wrappé; consommation et timing sleep non représentatifs. |
+| ESP32 / firmware | NVS / timers / logs | 🟢 | Composants ESP-IDF exercés dans l'environnement QEMU. |
+
+Légende : `🟢` exercé, `🟡` partiellement émulé, `🔴` non émulé.
+
 ## Fichiers
 
 ```text
