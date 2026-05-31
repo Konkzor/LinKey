@@ -149,6 +149,25 @@ jobs:
             sleep 2
           done
 
+          mosquitto_pub -h localhost -p 1884 -t linkey/debug/request -m GET_TIC_FRAME
+
+          deadline=$((SECONDS + 60))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if grep -Eq '^linkey/debug/tic_frame ' "mqtt-${TARIFF_OPTION}.log"; then
+              break
+            fi
+            if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+              set +e
+              wait "$QEMU_PID"
+              QEMU_RC=$?
+              set -e
+              echo "::error::QEMU exited before debug TIC frame response was captured"
+              echo "QEMU exit code: ${QEMU_RC}"
+              exit 1
+            fi
+            sleep 1
+          done
+
           kill "$QEMU_PID" 2>/dev/null || true
           wait "$QEMU_PID" 2>/dev/null || true
 
