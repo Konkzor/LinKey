@@ -55,10 +55,14 @@ jobs:
           . $IDF_PATH/export.sh
           idf.py build
 
-  boot-smoke:
-    name: QEMU boot smoke
+  qemu-emulation:
+    name: QEMU emulation (${{ matrix.tariff }})
     runs-on: ubuntu-latest
     container: espressif/idf:release-v5.4
+    strategy:
+      fail-fast: false
+      matrix:
+        tariff: [base, hphc, ejp, tempo]
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -71,64 +75,110 @@ jobs:
           . $IDF_PATH/export.sh
           python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
 
-      - name: Build firmware
+      - name: Install MQTT broker tools
         shell: bash
-        working-directory: Firmware
         run: |
-          . $IDF_PATH/export.sh
-          idf.py build
+          apt-get update
+          apt-get install -y --no-install-recommends mosquitto mosquitto-clients
 
-      - name: Run firmware in QEMU
+      - name: Run QEMU emulation and capture MQTT
         shell: bash
         working-directory: Firmware
+        env:
+          TARIFF_OPTION: ${{ matrix.tariff }}
         run: |
           . $IDF_PATH/export.sh
           eval "$(python "$IDF_PATH/tools/idf_tools.py" export)"
-          set +e
-          # Boot for ~20s. -no-reboot stops the VM on panic instead of looping.
-          # idf.py qemu re-runs ninja first; with a warm build it's a no-op.
-          timeout --preserve-status 20s \
-            idf.py qemu --qemu-extra-args="-no-reboot" \
-            > qemu.log 2>&1
-          echo "---- qemu.log ----"
-          cat qemu.log
 
-      - name: Assert boot succeeded
-        shell: bash
-        working-directory: Firmware
-        run: |
-          set -e
-          # Scope: validate the IDF boot chain reaches app_main entry. Anything
-          # after that runs project code that touches the ULP/RTC peripherals
-          # QEMU does not model, so we only fail on panics BEFORE app_main.
-          marker="main_task: Calling app_main()"
-          if ! grep -F "$marker" qemu.log; then
-            echo "::error::IDF did not reach app_main() within 20s"
+          cat > mosquitto-ci.conf <<'EOF'
+          per_listener_settings false
+          allow_anonymous true
+          listener 1884 0.0.0.0
+          protocol mqtt
+          log_dest stdout
+          log_timestamp true
+          log_type all
+          persistence false
+          EOF
+
+          mosquitto -c mosquitto-ci.conf > "mosquitto-${TARIFF_OPTION}.log" 2>&1 &
+          MOSQUITTO_PID=$!
+
+          cleanup() {
+            kill "${QEMU_PID:-}" "${SUB_PID:-}" "${MOSQUITTO_PID:-}" 2>/dev/null || true
+            wait "${QEMU_PID:-}" "${SUB_PID:-}" "${MOSQUITTO_PID:-}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          BROKER_READY=0
+          for _ in $(seq 1 30); do
+            if mosquitto_pub -h localhost -p 1884 -t ci/probe -m ready >/dev/null 2>&1; then
+              BROKER_READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$BROKER_READY" -ne 1 ]; then
+            echo "::error::Mosquitto did not become ready on localhost:1884"
+            cat "mosquitto-${TARIFF_OPTION}.log"
             exit 1
           fi
-          pre_app_main=$(sed -n "1,/$(printf '%s\n' "$marker" | sed 's/[][\.*^$/]/\\&/g')/p" qemu.log)
-          if echo "$pre_app_main" | grep -E "Guru Meditation Error|abort\(\) was called|assert failed:|CORRUPT HEAP"; then
-            echo "::error::Panic/abort detected during IDF startup (before app_main)"
-            exit 1
-          fi
-          if ! echo "$pre_app_main" | grep -E "app_init: Project name: +linky-ulp-monitor\b" >/dev/null; then
-            echo "::error::Wrong or missing project name in boot log (expected 'linky-ulp-monitor')"
-            exit 1
-          fi
-          for part in nvs phy_init factory; do
-            if ! echo "$pre_app_main" | grep -E "boot: +[0-9]+ +$part\b" >/dev/null; then
-              echo "::error::Partition '$part' not found in bootloader partition table log"
+
+          stdbuf -oL mosquitto_sub -h localhost -p 1884 -t '#' -v > "mqtt-${TARIFF_OPTION}.log" 2>&1 &
+          SUB_PID=$!
+
+          ./run_qemu_linkey.sh --tariff_option "$TARIFF_OPTION" --build > "qemu-${TARIFF_OPTION}.log" 2>&1 &
+          QEMU_PID=$!
+
+          deadline=$((SECONDS + 300))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if grep -Fxq "linkey/status online" "mqtt-${TARIFF_OPTION}.log" \
+              && grep -Eq '^homeassistant/device/linkey_[0-9a-f]{12}/config ' "mqtt-${TARIFF_OPTION}.log" \
+              && grep -Eq '^linkey/state ' "mqtt-${TARIFF_OPTION}.log"; then
+              break
+            fi
+            if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+              set +e
+              wait "$QEMU_PID"
+              QEMU_RC=$?
+              set -e
+              echo "::error::QEMU exited before expected MQTT messages were captured"
+              echo "QEMU exit code: ${QEMU_RC}"
               exit 1
             fi
+            sleep 2
           done
-          echo "Boot smoke OK (IDF boot chain reached app_main; project + partitions verified)"
 
-      - name: Upload QEMU log
+          kill "$QEMU_PID" 2>/dev/null || true
+          wait "$QEMU_PID" 2>/dev/null || true
+
+          echo "---- qemu-${TARIFF_OPTION}.log ----"
+          cat "qemu-${TARIFF_OPTION}.log"
+          echo "---- mqtt-${TARIFF_OPTION}.log ----"
+          cat "mqtt-${TARIFF_OPTION}.log"
+          echo "---- mosquitto-${TARIFF_OPTION}.log ----"
+          cat "mosquitto-${TARIFF_OPTION}.log"
+
+      - name: Assert QEMU MQTT behavior
+        shell: bash
+        working-directory: Firmware
+        env:
+          TARIFF_OPTION: ${{ matrix.tariff }}
+        run: |
+          python3 test/qemu/assert_mqtt.py \
+            --tariff-option "$TARIFF_OPTION" \
+            --mqtt-log "mqtt-${TARIFF_OPTION}.log" \
+            --qemu-log "qemu-${TARIFF_OPTION}.log"
+
+      - name: Upload QEMU MQTT logs
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: qemu-boot-log
-          path: Firmware/qemu.log
+          name: qemu-emulation-${{ matrix.tariff }}-logs
+          path: |
+            Firmware/qemu-${{ matrix.tariff }}.log
+            Firmware/mqtt-${{ matrix.tariff }}.log
+            Firmware/mosquitto-${{ matrix.tariff }}.log
 
   pcb-drc:
     name: KiCad DRC

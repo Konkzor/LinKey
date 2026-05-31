@@ -14,11 +14,15 @@ PCB/MCAD files/*.FCBak
 
 # Firmware
 Firmware/build/
+Firmware/build-qemu/
+Firmware/build-qemu-*/
 Firmware/sdkconfig*
 !Firmware/sdkconfig.defaults
 Firmware/.cache/
 Firmware/test/host/build/
 qemu.log
+__pycache__/
+*.pyc
 
 # VS Code
 .vscode/

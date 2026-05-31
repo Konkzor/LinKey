@@ -1,0 +1,30 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: linkey-test-mosquitto
+    ports:
+      - "1884:1883"    # MQTT (host port 1884 avoids conflicts with existing brokers)
+    volumes:
+      - ./mosquitto_qemu.conf:/tmp/mosquitto.conf:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-logs:/mosquitto/log
+    command: ["mosquitto", "-c", "/tmp/mosquitto.conf"]
+    environment:
+      - TZ=UTC
+    networks:
+      - linkey-test-network
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-C", "1", "-t", "$$SYS/broker/clients/total"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  mosquitto-data:
+    driver: local
+  mosquitto-logs:
+    driver: local
+
+networks:
+  linkey-test-network:
+    driver: bridge
