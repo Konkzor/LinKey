@@ -152,3 +152,12 @@ void get_linky_data(linky_data_t *data)
 
     tic_parse_frame(frame, len, data);
 }
+
+int get_last_tic_frame(char *frame, int frame_size)
+{
+    if (!frame || frame_size < (LINKY_MAX_FRAME_LEN + 1)) return -1;
+
+    // Read from whichever buffer is currently active
+    ulp_var_t *buf = (ulp_active_buf.val & 1) ? ulp_frame_buf_1 : ulp_frame_buf_0;
+    return frame_string_get(buf, frame, frame_size);
+}

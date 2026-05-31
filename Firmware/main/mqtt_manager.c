@@ -17,6 +17,8 @@ static const char *TAG = "MQTT_MGR";
 // MQTT topics
 #define MQTT_TOPIC_STATE  CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/state"
 #define MQTT_TOPIC_STATUS CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/status"
+#define MQTT_TOPIC_DEBUG_REQ CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/debug/request"
+#define MQTT_TOPIC_DEBUG_FRAME CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/debug/tic_frame"
 
 // Home Assistant discovery prefix
 #define HA_DISCOVERY_PREFIX "homeassistant"
@@ -328,6 +330,13 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
     DEBUG_LOG(TAG, "Published HA device discovery");
 }
 
+// Subscribe to debug request topic
+static void mqtt_subscribe_debug_topic(esp_mqtt_client_handle_t client)
+{
+    esp_mqtt_client_subscribe(client, MQTT_TOPIC_DEBUG_REQ, 1);
+    DEBUG_LOG(TAG, "Subscribed to debug request topic");
+}
+
 // Publish online status to availability topic
 static void mqtt_publish_online(esp_mqtt_client_handle_t client)
 {
@@ -348,6 +357,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             // Publish online status and HA discovery configs
             mqtt_publish_online(state->client);
             mqtt_publish_ha_discovery(state->client);
+            // Subscribe to debug request topic
+            mqtt_subscribe_debug_topic(state->client);
             break;
         case MQTT_EVENT_DISCONNECTED:
             DEBUG_LOG(TAG, "MQTT disconnected");
@@ -360,6 +371,21 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
         case MQTT_EVENT_DELETED:
             DEBUG_LOGW(TAG, "MQTT message expired");
             break;
+        case MQTT_EVENT_DATA:
+        {
+            esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+            if (event->topic_len > 0 && event->data_len > 0) {
+                // Check if this is a debug request message
+                if (strncmp(event->topic, MQTT_TOPIC_DEBUG_REQ, event->topic_len) == 0) {
+                    // Check for magic word "GET_TIC_FRAME"
+                    if (event->data_len >= 12 && strncmp(event->data, "GET_TIC_FRAME", 13) == 0) {
+                        DEBUG_LOG(TAG, "Debug request received: GET_TIC_FRAME");
+                        state->debug_frame_requested = true;
+                    }
+                }
+            }
+            break;
+        }
         default:
             break;
     }
@@ -610,5 +636,21 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
     }
 
     DEBUG_LOG(TAG, "Published: %s", payload);
+    return true;
+}
+
+bool mqtt_publish_tic_frame_debug(mqtt_state_t *state, const char *frame, int frame_len)
+{
+    if (!state || !state->connected || !frame || frame_len <= 0) {
+        return false;
+    }
+
+    int ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_DEBUG_FRAME, frame, frame_len, 1, 0);
+    if (ret < 0) {
+        DEBUG_LOGW(TAG, "Failed to publish debug frame");
+        return false;
+    }
+
+    DEBUG_LOG(TAG, "Published debug TIC frame (%d bytes)", frame_len);
     return true;
 }
