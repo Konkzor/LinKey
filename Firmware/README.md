@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surveiller en continu la sortie série TIC (Télé-Information Client) du Linky pendant que le CPU principal reste en *light sleep*. L'ULP reçoit chaque trame TIC complète dans un buffer RTC, puis réveille le CPU principal pour publier les données via MQTT.
+Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surveiller en continu la sortie série TIC (Télé-Information Client) du Linky (monophasé) pendant que le CPU principal reste en *light sleep*. L'ULP reçoit chaque trame TIC complète dans un buffer RTC, puis réveille le CPU principal pour publier les données via MQTT.
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -146,6 +146,8 @@ Les deux modes (**historique** et **standard**) partagent cette structure ; ils 
 
 ### Mode historique
 
+> Cette section n'est applicable qu'à un compteur Linky monophasé.
+
 | | Mode historique |
 |-|-|
 | Débit série | 1200 bauds, 7E1 |
@@ -174,6 +176,8 @@ ADPS 030 !
 | `BBRHCJB`, `BBRHPJB`, `BBRHCJW`, `BBRHPJW`, `BBRHCJR`, `BBRHPJR` | Index énergie — contrat **Tempo** | Wh |
 
 ### Mode standard
+
+> Cette section n'est applicable qu'à un compteur Linky monophasé.
 
 | | Mode standard |
 |-|-|
