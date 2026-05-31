@@ -106,9 +106,27 @@ L'appareil est auto-découvert via MQTT. À la connexion, un payload de découve
 homeassistant/device/linkey_<mac>/config
 ```
 
-Cela enregistre l'appareil avec tous ses capteurs dans Home Assistant. L'appareil apparaît avec :
+Cela enregistre l'appareil avec tous ses capteurs dans Home Assistant. Il est alors listé parmi les appareils de votre intégration MQTT :
+
+<p align="center">
+  <img src="../Doc/images/capture_homeassistant_mqtt_decouverte.png" width="900" alt="Capture écran HA découverte">
+</p>
+
+En cliquant dessus, vous pouvez obtenir les "Informations Appareil" de celui-ci :
+
+<p align="center">
+  <img src="../Doc/images/capture_homeassistant_infos_appareil.png" width="300" alt="Capture écran HA infos appareil">
+</p>
+
+Ainsi que la liste de ses "Capteurs" :
+
+<p align="center">
+  <img src="../Doc/images/capture_homeassistant_capteurs.png" width="300" alt="Capture écran HA capteurs">
+</p>
+
+On y trouve entre autres :
 - **Courant** (IINST) — mesure instantanée
-- **Index d'énergie** (BASE) — *total increasing* pour le tableau de bord énergie
+- **Index d'énergie** (BASE, HPHC, TEMPO, etc.) — *total increasing*. Ces index sont facilement utilisables dans le tableau de bord "Energie" (une fois associés à des prix du kWh pour chaque période tarifaire)
 - **Puissance apparente** (PAPP) — mesure instantanée
 - **Avertissement de surintensité** (ADPS) — alerte de surcharge
 - **Tension supercondensateur** (VCAP) — mesure instantanée
@@ -247,7 +265,7 @@ Les tests unitaires *host* couvrent la logique pure extraite des modules — pou
 
 ### Exécuter localement
 
-Pour éxécuter les tests localement :
+Pour exécuter les tests localement :
 
 ```bash
 cd Firmware/test/host
