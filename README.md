@@ -8,9 +8,9 @@
 [![Hardware License: CERN-OHL-W-2.0](https://img.shields.io/badge/hardware-CERN--OHL--W--2.0-blue.svg)](LICENSE)
 [![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.4-red.svg)](https://docs.espressif.com/projects/esp-idf/en/v5.4/)
 
-Moniteur **open-hardware** basse consommation à base d'ESP32 pour le compteur électrique **Linky**, avec intégration native à **Home Assistant** via MQTT.
+Moniteur **open-hardware** basse consommation à base d'ESP32 pour le compteur électrique **Linky** (monophasé), avec intégration native à **Home Assistant** via MQTT.
 
-LinKey (jeu de mot) lit la sortie série TIC (Télé-Information Client) du Linky et publie les mesures de puissance, d'énergie et de courant vers le broker MQTT de votre Home Assistant. Le coprocesseur ULP de l'ESP32 décode la trame TIC pendant que le CPU principal reste en *light sleep*, ce qui maintient une consommation moyenne suffisamment faible pour fonctionner sur l'alimentation de la TIC via une supercapa.
+LinKey (jeu de mot) lit la sortie série TIC (Télé-Information Client) d'un Linky monophasé et publie les mesures de puissance, d'énergie et de courant vers le broker MQTT de votre Home Assistant. Le coprocesseur ULP de l'ESP32 décode la trame TIC pendant que le CPU principal reste en *light sleep*, ce qui maintient une consommation moyenne suffisamment faible pour fonctionner sur l'alimentation de la TIC via une supercapa.
 
 ## Fonctionnalités
 

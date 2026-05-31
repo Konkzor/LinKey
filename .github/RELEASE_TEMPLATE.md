@@ -1,8 +1,4 @@
-# LinKey <YY.N>
-
 > Release groupée du projet LinKey : firmware, carte électronique et boîtier 3D dans un état cohérent et testé ensemble.
->
-> Tag : `<YY.N>` — année.numéro de release (ex. `26.1` = première release de 2026). Pas de cadence fixe : une nouvelle release est publiée à chaque jalon utile.
 
 ## Composants
 
