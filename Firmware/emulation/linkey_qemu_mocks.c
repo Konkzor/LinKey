@@ -5,6 +5,7 @@
 #include "esp_eth_netif_glue.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_pm.h"
 #include "freertos/FreeRTOS.h"
@@ -23,6 +24,7 @@ static bool qemu_next_buffer_is_1;
 static esp_eth_handle_t qemu_eth_handle;
 static esp_eth_netif_glue_handle_t qemu_eth_glue;
 static bool qemu_eth_has_ip;
+static const uint8_t qemu_wifi_sta_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
 
 static const char *qemu_selected_frame(int *len)
 {
@@ -137,6 +139,20 @@ esp_err_t __wrap_esp_pm_configure(const esp_pm_config_t *config)
     (void)config;
     ESP_LOGI(TAG, "Power management skipped for QEMU emulation");
     return ESP_OK;
+}
+
+esp_err_t __real_esp_read_mac(uint8_t *mac, esp_mac_type_t type);
+
+esp_err_t __wrap_esp_read_mac(uint8_t *mac, esp_mac_type_t type)
+{
+    if (!mac) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (type == ESP_MAC_WIFI_STA) {
+        memcpy(mac, qemu_wifi_sta_mac, sizeof(qemu_wifi_sta_mac));
+        return ESP_OK;
+    }
+    return __real_esp_read_mac(mac, type);
 }
 
 esp_err_t __wrap_hulp_ulp_isr_register(intr_handler_t handler, void *handler_arg)

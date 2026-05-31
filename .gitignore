@@ -21,6 +21,8 @@ Firmware/sdkconfig*
 Firmware/.cache/
 Firmware/test/host/build/
 qemu.log
+__pycache__/
+*.pyc
 
 # VS Code
 .vscode/
