@@ -29,6 +29,7 @@ typedef struct {
     bool started;                  /**< esp_mqtt_client_start() has been called */
     bool connected;                /**< Currently connected to broker */
     esp_mqtt_client_handle_t client; /**< ESP-MQTT client handle */
+    bool debug_frame_requested;    /**< Debug: request to publish raw TIC frame */
 } mqtt_state_t;
 
 /**
@@ -86,6 +87,17 @@ bool mqtt_is_connected(mqtt_state_t *state);
  * @return true if all publishes succeeded, false otherwise
  */
 bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data);
+
+/**
+ * @brief Publish raw TIC frame to debug topic (linkey/debug/tic_frame)
+ *
+ * @param[in] state      MQTT state structure
+ * @param[in] frame      Raw TIC frame buffer (including STX/ETX)
+ * @param[in] frame_len  Length of frame
+ *
+ * @return true if publish succeeded, false otherwise
+ */
+bool mqtt_publish_tic_frame_debug(mqtt_state_t *state, const char *frame, int frame_len);
 
 #ifdef __cplusplus
 }

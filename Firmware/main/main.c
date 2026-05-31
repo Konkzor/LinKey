@@ -17,6 +17,7 @@
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
 #include "debug.h"
+#include "tic_types.h"
 
 static const char *TAG = "LINKY_MAIN";
 
@@ -322,6 +323,17 @@ static app_state_t handle_state_publish_data(void)
             DEBUG_LOG(TAG, "Linky data received (flags: 0x%04x, IINST: %u A)",
                     linky_data.valid_flags, linky_data.iinst);
             publish_ok = mqtt_publish_linky_data(&mqtt_state, &linky_data);
+            
+            // Handle debug frame request if flagged
+            if (mqtt_state.debug_frame_requested) {
+                char debug_frame[LINKY_MAX_FRAME_LEN + 1];
+                int frame_len = get_last_tic_frame(debug_frame, sizeof(debug_frame));
+                if (frame_len > 0) {
+                    mqtt_publish_tic_frame_debug(&mqtt_state, debug_frame, frame_len);
+                }
+                mqtt_state.debug_frame_requested = false;
+            }
+            
             if (!publish_ok) {
                 DEBUG_LOGW(TAG, "Publish failed - returning to MQTT_CONNECT");
             }

@@ -28,6 +28,78 @@ TARIFF_DISCOVERY_COMPONENTS = {
 
 COMMON_STATE_FIELDS = {"iinst", "papp", "vcap", "uptime"}
 QEMU_WIFI_STA_MAC = "aabbccddeeff"
+DEBUG_REQUEST_TOPIC = "linkey/debug/request"
+DEBUG_REQUEST_PAYLOAD = "GET_TIC_FRAME"
+DEBUG_FRAME_TOPIC = "linkey/debug/tic_frame"
+DEBUG_FRAME_TOPIC_BYTES = b"linkey/debug/tic_frame "
+
+EXPECTED_DEBUG_FRAMES = {
+    "base": (
+        b"\x02"
+        b"\nADCO 123456789012 G\r"
+        b"\nOPTARIF BASE 0\r"
+        b"\nISOUSC 30 9\r"
+        b"\nBASE 012345678 /\r"
+        b"\nPTEC TH.. $\r"
+        b"\nIINST 005 \\\r"
+        b"\nADPS 030 ;\r"
+        b"\nIMAX 090 H\r"
+        b"\nPAPP 00690 0\r"
+        b"\nHHPHC A ,\r"
+        b"\nMOTDETAT 000000 B\r"
+    ),
+    "hphc": (
+        b"\x02"
+        b"\nADCO 123456789012 G\r"
+        b"\nOPTARIF HC.. <\r"
+        b"\nISOUSC 30 9\r"
+        b"\nHCHC 000123456 [\r"
+        b"\nHCHP 000023456 '\r"
+        b"\nPTEC HP..  \r"
+        b"\nIINST 005 \\\r"
+        b"\nADPS 030 ;\r"
+        b"\nIMAX 090 H\r"
+        b"\nPAPP 00690 0\r"
+        b"\nHHPHC A ,\r"
+        b"\nMOTDETAT 000000 B\r"
+    ),
+    "ejp": (
+        b"\x02"
+        b"\nADCO 123456789012 G\r"
+        b"\nOPTARIF EJP  T\r"
+        b"\nISOUSC 30 9\r"
+        b"\nEJPHN 000123456 :\r"
+        b"\nEJPHPM 000023456 H\r"
+        b"\nPEJP 30 R\r"
+        b"\nPTEC HN.. ^\r"
+        b"\nIINST 005 \\\r"
+        b"\nADPS 030 ;\r"
+        b"\nIMAX 090 H\r"
+        b"\nPAPP 00690 0\r"
+        b"\nHHPHC A ,\r"
+        b"\nMOTDETAT 000000 B\r"
+    ),
+    "tempo": (
+        b"\x02"
+        b"\nADCO 123456789012 G\r"
+        b"\nOPTARIF BBR( S\r"
+        b"\nISOUSC 30 9\r"
+        b"\nBBRHCJB 000123456 2\r"
+        b"\nBBRHPJB 000023456 >\r"
+        b"\nBBRHCJW 000023457 G\r"
+        b"\nBBRHPJW 000023458 U\r"
+        b"\nBBRHCJR 000023459 D\r"
+        b"\nBBRHPJR 000023460 I\r"
+        b"\nPTEC HPJB P\r"
+        b"\nDEMAIN ---- \"\r"
+        b"\nIINST 005 \\\r"
+        b"\nADPS 030 ;\r"
+        b"\nIMAX 090 H\r"
+        b"\nPAPP 00690 0\r"
+        b"\nHHPHC A ,\r"
+        b"\nMOTDETAT 000000 B\r"
+    ),
+}
 
 DISCOVERY_TOPIC_RE = re.compile(r"^homeassistant/device/linkey_([0-9a-f]{12})/config$")
 PANIC_RE = re.compile(r"Guru Meditation Error|abort\(\) was called|assert failed:|CORRUPT HEAP")
@@ -141,6 +213,28 @@ def assert_state(messages: list[tuple[str, str]]) -> None:
         fail(f"State payload missing common fields: {', '.join(missing)}")
 
 
+def assert_debug_frame(messages: list[tuple[str, str]], mqtt_log: Path, tariff_option: str) -> None:
+    if (DEBUG_REQUEST_TOPIC, DEBUG_REQUEST_PAYLOAD) not in messages:
+        fail(f"Missing exact debug request echo: {DEBUG_REQUEST_TOPIC} {DEBUG_REQUEST_PAYLOAD}")
+
+    if not any(topic == DEBUG_FRAME_TOPIC for topic, _ in messages):
+        fail(f"Missing exact MQTT debug TIC frame topic: {DEBUG_FRAME_TOPIC}")
+
+    log_bytes = mqtt_log.read_bytes()
+    frame_start = log_bytes.rfind(DEBUG_FRAME_TOPIC_BYTES)
+    if frame_start < 0:
+        fail(f"Missing debug TIC frame marker in MQTT log: {DEBUG_FRAME_TOPIC}")
+
+    frame_bytes = log_bytes[frame_start + len(DEBUG_FRAME_TOPIC_BYTES):]
+    expected_frame = EXPECTED_DEBUG_FRAMES[tariff_option]
+    if not frame_bytes.startswith(expected_frame):
+        fail(f"Debug TIC frame payload does not exactly match mocked {tariff_option} frame")
+
+    next_byte_pos = len(expected_frame)
+    if len(frame_bytes) > next_byte_pos and frame_bytes[next_byte_pos:next_byte_pos + 1] != b"\n":
+        fail("Debug TIC frame payload has unexpected trailing bytes")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tariff-option", choices=sorted(TARIFF_DISCOVERY_COMPONENTS), required=True)
@@ -156,6 +250,7 @@ def main() -> int:
     assert_status(messages)
     assert_discovery(messages, args.tariff_option)
     assert_state(messages)
+    assert_debug_frame(messages, args.mqtt_log, args.tariff_option)
 
     print(f"MQTT QEMU assertions OK for tariff_option={args.tariff_option}")
     return 0

@@ -55,6 +55,19 @@ void init_ulp_linky(void);
  */
 void get_linky_data(linky_data_t *data);
 
+/**
+ * @brief Extract the last received TIC frame from RTC buffer.
+ *
+ * Returns the raw frame (including STX/ETX) from the active buffer.
+ * Used for debug purposes to inspect raw TIC data.
+ *
+ * @param[out] frame       Output buffer for frame data
+ * @param[in]  frame_size  Size of output buffer (must be >= LINKY_MAX_FRAME_LEN + 1)
+ *
+ * @return Length of frame on success, -1 on error or invalid frame
+ */
+int get_last_tic_frame(char *frame, int frame_size);
+
 #ifdef __cplusplus
 }
 #endif
