@@ -4283,7 +4283,7 @@
 			(embedded_fonts no)
 		)
 	)
-	(text "Icharge=0,7V/R10=39mA"
+	(text "Icharge env.= 0,7V/R10"
 		(exclude_from_sim no)
 		(at 81.534 115.316 0)
 		(effects
@@ -6288,7 +6288,7 @@
 			(uuid "3221419d-1097-4fa6-a64e-aab55d4d6aa6")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "R1")
 					(unit 1)
@@ -6688,7 +6688,7 @@
 			(uuid "0aef2ded-ae70-4883-ae9b-984d0dc6f5af")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "R4")
 					(unit 1)
@@ -7497,7 +7497,7 @@
 			(uuid "1318853d-90a8-4d3c-b7b2-b6363ff2c336")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "R9")
 					(unit 1)
@@ -7724,7 +7724,7 @@
 			(uuid "1318853d-90a8-4d3c-b7b2-b6363ff2c337")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "R8")
 					(unit 1)
@@ -8023,7 +8023,7 @@
 			(uuid "17476b18-70e9-447a-acaa-decfcc0eb96f")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "U1")
 					(unit 1)
@@ -8270,7 +8270,7 @@
 			(uuid "407af5d0-5c87-4b4d-948a-f935bf875eb8")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "#PWR02")
 					(unit 1)
@@ -8912,7 +8912,7 @@
 			(uuid "6d57c36b-f696-4bd0-960a-a8bbefb07a9e")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "J1")
 					(unit 1)
@@ -9554,7 +9554,7 @@
 			(uuid "1318853d-90a8-4d3c-b7b2-b6363ff2c338")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "R6")
 					(unit 1)
@@ -10113,7 +10113,7 @@
 			(uuid "407af5d0-5c87-4b4d-948a-f935bf875eb9")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "#PWR01")
 					(unit 1)
@@ -10210,7 +10210,7 @@
 				(hide yes)
 			)
 		)
-		(property "Voltage" "75V"
+		(property "Voltage" "150V"
 			(at 81.28 111.76 90)
 			(effects
 				(font
@@ -10674,7 +10674,7 @@
 			(uuid "1e18ad0a-be9e-47bd-ab81-b9f4030c9e31")
 		)
 		(instances
-			(project ""
+			(project "LinKey"
 				(path "/3bf5bc74-5075-4135-ab8d-3c2b05f42fe2"
 					(reference "#PWR04")
 					(unit 1)
@@ -11787,7 +11787,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "175p"
+		(property "Value" "180p"
 			(at 223.52 122.936 0)
 			(effects
 				(font
