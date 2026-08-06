@@ -6,18 +6,6 @@ menu "Linkey Monitor Configuration"
         help
             Device name shown in Home Assistant.
 
-    config LINKEY_WIFI_SSID
-        string "WiFi SSID"
-        default ""
-        help
-            SSID (network name) for the example to connect to.
-
-    config LINKEY_WIFI_PASSWORD
-        string "WiFi Password"
-        default ""
-        help
-            WiFi password (WPA or WPA2) for the example to use.
-
     config LINKEY_MQTT_BROKER_URI
         string "MQTT Broker URI"
         default "mqtt://192.168.1.100"
@@ -42,6 +30,13 @@ menu "Linkey Monitor Configuration"
         default "linkey"
         help
             Prefix for MQTT topics. Topics will be: <prefix>/state, <prefix>/status
+
+    config LINKEY_PROV_POP
+        string "Provisioning Proof of Possession"
+        default "linkey-pop"
+        help
+            Proof of possession used by the Espressif provisioning app.
+            This should be unique per device in production.
 
     config LINKEY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"

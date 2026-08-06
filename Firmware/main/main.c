@@ -16,6 +16,7 @@
 #include "voltage_manager.h"
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
+#include "provisioning_manager.h"
 #include "debug.h"
 #include "tic_types.h"
 
@@ -40,6 +41,7 @@ static const char *TAG = "LINKY_MAIN";
 // State LED color configuration (easily customizable)
 #define LED_COLOR_INIT          RGB_CYAN
 #define LED_COLOR_WAIT_VOLTAGE  RGB_RED
+#define LED_COLOR_BLE_PROVISION RGB_WHITE
 #define LED_COLOR_WIFI_CONNECT     RGB_BLUE
 #define LED_COLOR_MQTT_CONNECT     RGB_MAGENTA
 #define LED_COLOR_WAIT_ULP_DATA      RGB_YELLOW
@@ -67,6 +69,7 @@ static app_state_t current_state = STATE_INIT;
 static const uint8_t state_colors[] = {
     LED_COLOR_INIT,
     LED_COLOR_WAIT_VOLTAGE,
+    LED_COLOR_BLE_PROVISION,
     LED_COLOR_WIFI_CONNECT,
     LED_COLOR_MQTT_CONNECT,
     LED_COLOR_WAIT_ULP_DATA,
@@ -166,6 +169,7 @@ static conn_result_t ulp_wait_data(void)
 // Forward declarations for state handlers
 static app_state_t handle_state_init(void);
 static app_state_t handle_state_wait_voltage(void);
+static app_state_t handle_state_ble_provision(void);
 static app_state_t handle_state_wifi_connect(void);
 static app_state_t handle_state_mqtt_connect(void);
 static app_state_t handle_state_wait_ulp_data(void);
@@ -207,11 +211,48 @@ static app_state_t handle_state_wait_voltage(void)
     DEBUG_LOG(TAG, "Supercap voltage: %d mV", voltage_mv);
 
     if (voltage_mv >= VOLTAGE_START_MV) {
-        DEBUG_LOG(TAG, "Voltage sufficient - proceeding to WiFi init");
+        if (!wifi_state.initialized) {
+            DEBUG_LOG(TAG, "Initializing WiFi...");
+            wifi_init(&wifi_state);
+        }
+
+        if (!wifi_has_config()) {
+            DEBUG_LOG(TAG, "Voltage sufficient but WiFi is not provisioned");
+            return STATE_BLE_PROVISION;
+        }
+
+        DEBUG_LOG(TAG, "Voltage sufficient - proceeding to WiFi connect");
         return STATE_WIFI_CONNECT;
     }
 
     return STATE_WAIT_VOLTAGE;
+}
+
+// STATE_BLE_PROVISION: Provision WiFi credentials over BLE
+static app_state_t handle_state_ble_provision(void)
+{
+    if (!wifi_state.initialized) {
+        DEBUG_LOG(TAG, "Initializing WiFi for provisioning...");
+        wifi_init(&wifi_state);
+    }
+
+    DEBUG_LOG(TAG, "Starting BLE WiFi provisioning...");
+    conn_result_t result = provisioning_start_ble(VOLTAGE_FALLBACK_MIN_MV,
+                                                 POLL_INTERVAL_MS);
+    if (result == CONN_OK) {
+        DEBUG_LOG(TAG, "WiFi credentials stored - returning to WAIT_VOLTAGE");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+    if (result == CONN_VOLTAGE_LOW) {
+        DEBUG_LOGW(TAG, "Voltage too low - returning to WAIT_VOLTAGE");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+
+    DEBUG_LOGW(TAG, "BLE provisioning failed - retrying");
+    stop_all_connections();
+    return STATE_BLE_PROVISION;
 }
 
 // STATE_WIFI_CONNECT: Initialize WiFi (once) and connect
@@ -391,6 +432,9 @@ void app_main(void)
                 break;
             case STATE_WIFI_CONNECT:
                 current_state = handle_state_wifi_connect();
+                break;
+            case STATE_BLE_PROVISION:
+                current_state = handle_state_ble_provision();
                 break;
             case STATE_MQTT_CONNECT:
                 current_state = handle_state_mqtt_connect();

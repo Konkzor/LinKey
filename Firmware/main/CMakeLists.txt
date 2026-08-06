@@ -1,7 +1,13 @@
+set(linkey_requires nvs_flash esp_wifi mqtt wifi_provisioning bt HULP)
+
+if(CONFIG_LINKEY_DEBUG_LOGS)
+    list(APPEND linkey_requires qrcode)
+endif()
+
 idf_component_register(
-    SRCS "main.c" "ulp_linky.cpp" "tic_parser.c" "voltage_manager.c" "voltage_state.c" "wifi_manager.c" "mqtt_manager.c" "fsm.c"
+    SRCS "main.c" "ulp_linky.cpp" "tic_parser.c" "voltage_manager.c" "voltage_state.c" "wifi_manager.c" "mqtt_manager.c" "fsm.c" "provisioning_manager.c"
     INCLUDE_DIRS "."
-    REQUIRES nvs_flash esp_wifi mqtt HULP
+    REQUIRES ${linkey_requires}
 )
 
 if(LINKEY_QEMU_EMULATION)
