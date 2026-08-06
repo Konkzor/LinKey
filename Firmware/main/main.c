@@ -260,7 +260,7 @@ static app_state_t handle_state_mqtt_connect(void)
                                         VOLTAGE_FALLBACK_MIN_MV, wifi_is_connected,
                                         MQTT_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
     if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
-        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+        DEBUG_LOGW(TAG, "%s", result == CONN_VOLTAGE_LOW
             ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
             : "WiFi lost during MQTT connect - returning to WIFI_CONNECT");
         stop_all_connections();
@@ -289,7 +289,7 @@ static app_state_t handle_state_wait_ulp_data(void)
 
     conn_result_t result = ulp_wait_data();
     if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
-        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+        DEBUG_LOGW(TAG, "%s", result == CONN_VOLTAGE_LOW
             ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
             : "WiFi or MQTT lost during ULP wait - returning to WIFI_CONNECT");
         stop_all_connections();

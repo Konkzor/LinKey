@@ -39,21 +39,34 @@ jobs:
           fail_ci_if_error: false
 
   firmware-build:
-    name: ESP-IDF firmware build
+    name: ESP-IDF firmware build (${{ matrix.variant }})
     runs-on: ubuntu-latest
     container: espressif/idf:release-v5.4
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            build_dir: build
+            sdkconfig_defaults: sdkconfig.defaults
+          - variant: debug-logs
+            build_dir: build-debug
+            sdkconfig_defaults: sdkconfig.defaults;sdkconfig.ci-debug.defaults
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           submodules: recursive
 
-      - name: Build firmware
+      - name: Build firmware (${{ matrix.variant }})
         shell: bash
         working-directory: Firmware
         run: |
           . $IDF_PATH/export.sh
-          idf.py build
+          idf.py \
+            -B "${{ matrix.build_dir }}" \
+            -DSDKCONFIG_DEFAULTS="${{ matrix.sdkconfig_defaults }}" \
+            build
 
   qemu-emulation:
     name: QEMU emulation (${{ matrix.tariff }})

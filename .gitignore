@@ -14,10 +14,12 @@ PCB/MCAD files/*.FCBak
 
 # Firmware
 Firmware/build/
+Firmware/build-debug/
 Firmware/build-qemu/
 Firmware/build-qemu-*/
 Firmware/sdkconfig*
 !Firmware/sdkconfig.defaults
+!Firmware/sdkconfig.ci-debug.defaults
 Firmware/.cache/
 Firmware/test/host/build/
 qemu.log
