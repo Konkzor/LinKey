@@ -12,10 +12,6 @@ RTC_DATA_ATTR static uint8_t rtc_bssid[6] = {0};
 RTC_DATA_ATTR static uint8_t rtc_channel = 0;
 RTC_DATA_ATTR static bool rtc_bssid_valid = false;
 
-// WiFi credentials from Kconfig
-#define WIFI_SSID       CONFIG_LINKEY_WIFI_SSID
-#define WIFI_PASS       CONFIG_LINKEY_WIFI_PASSWORD
-
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                 int32_t event_id, void* event_data)
 {
@@ -26,11 +22,13 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         DEBUG_LOG(TAG, "WiFi STA started");
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t* event = (wifi_event_sta_disconnected_t*) event_data;
+        (void)event;
         DEBUG_LOG(TAG, "WiFi disconnected, reason: %d", event->reason);
         xEventGroupClearBits(state->event_group, WIFI_CONNECTED_BIT);
         xEventGroupSetBits(state->event_group, WIFI_FAIL_BIT);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
+        (void)event;
         DEBUG_LOG(TAG, "WiFi connected - IP: " IPSTR, IP2STR(&event->ip_info.ip));
 
         // Cache BSSID and channel for faster reconnection next time
@@ -71,7 +69,7 @@ void wifi_init(wifi_state_t *state)
 #endif
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    cfg.nvs_enable = 0;
+    cfg.nvs_enable = 1;
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
     esp_event_handler_instance_t instance_any_id;
@@ -87,35 +85,29 @@ void wifi_init(wifi_state_t *state)
                                                         state,
                                                         &instance_got_ip));
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-            .scan_method = WIFI_FAST_SCAN,
-            .sort_method = WIFI_CONNECT_AP_BY_SIGNAL,
-            .bssid_set = 0,
-            .listen_interval = 10,
-        },
-    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
-    if (rtc_bssid_valid) {
-        memcpy(wifi_config.sta.bssid, rtc_bssid, 6);
-        wifi_config.sta.bssid_set = 1;
-        wifi_config.sta.channel = rtc_channel;
-        DEBUG_LOG(TAG, "Using cached AP (Ch %d)", rtc_channel);
+    wifi_config_t wifi_config = {0};
+    ESP_ERROR_CHECK(esp_wifi_get_config(WIFI_IF_STA, &wifi_config));
+
+    if (wifi_config.sta.ssid[0] != '\0') {
+        wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+        wifi_config.sta.scan_method = WIFI_FAST_SCAN;
+        wifi_config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+        wifi_config.sta.listen_interval = 10;
+
+        if (rtc_bssid_valid) {
+            memcpy(wifi_config.sta.bssid, rtc_bssid, 6);
+            wifi_config.sta.bssid_set = 1;
+            wifi_config.sta.channel = rtc_channel;
+            DEBUG_LOG(TAG, "Using cached AP (Ch %d)", rtc_channel);
+        }
+
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_MAX_MODEM));
     DEBUG_LOG(TAG, "WiFi modem sleep enabled");
-
-    ESP_ERROR_CHECK(esp_wifi_start());
-    state->started = true;
-
-    // Set shorter beacon timeout for faster disconnect detection (minimum 3s for STA)
-    ESP_ERROR_CHECK(esp_wifi_set_inactive_time(WIFI_IF_STA, 3));
 
     state->initialized = true;
     DEBUG_LOG(TAG, "WiFi initialized");
@@ -140,8 +132,26 @@ void wifi_start(wifi_state_t *state)
     if (state->initialized && !state->started) {
         DEBUG_LOG(TAG, "Starting WiFi...");
         ESP_ERROR_CHECK(esp_wifi_start());
+        // Set shorter beacon timeout after WiFi is started (minimum 3s for STA).
+        ESP_ERROR_CHECK(esp_wifi_set_inactive_time(WIFI_IF_STA, 3));
         state->started = true;
     }
+}
+
+bool wifi_has_config(void)
+{
+    wifi_config_t wifi_config = {0};
+    if (esp_wifi_get_config(WIFI_IF_STA, &wifi_config) != ESP_OK) {
+        return false;
+    }
+    return wifi_config.sta.ssid[0] != '\0';
+}
+
+void wifi_mark_started(wifi_state_t *state)
+{
+    if (!state) return;
+    ESP_ERROR_CHECK(esp_wifi_set_inactive_time(WIFI_IF_STA, 3));
+    state->started = true;
 }
 
 conn_result_t wifi_connect(wifi_state_t *state, voltage_check_fn_t voltage_check,
