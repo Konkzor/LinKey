@@ -9,6 +9,7 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
 │  CPU principal (FSM) (réveil périodique)    │
 │  • Surveillance tension avec seuils de      │
 │    fallback par état                        │
+│  • Provisioning WiFi BLE si nécessaire      │
 │  • Gestion des connexions WiFi/MQTT         │
 │  • Auto-découverte HA à la connexion MQTT   │
 │  • Publication JSON des données capteurs    │
@@ -30,6 +31,10 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
 - **Vrai support UART 7E1** : gestion correcte des 7 bits de données + parité paire (ignorée)
 - **Mode *light sleep*** : WiFi maintenu connecté, réveil rapide (à mesurer)
 - **WiFi** :
+  - Identifiants provisionnés en BLE via l'application Espressif
+  - Stockage des identifiants dans la NVS WiFi ESP-IDF
+  - Validation WiFi différée : la FSM reprend la main après le provisioning
+  - Scan WiFi désactivé pendant le provisioning pour limiter le courant
   - Mise en cache du BSSID/canal pour reconnexion instantanée
   - *Fast scan*
   - *Modem sleep* WiFi pour économie d'énergie
@@ -60,7 +65,9 @@ stateDiagram-v2
     direction LR
     [*] --> INIT
     INIT --> WAIT_VOLTAGE
-    WAIT_VOLTAGE --> ACTIVE: V ≥ 2,5 V
+    WAIT_VOLTAGE --> BLE_PROVISION: V ≥ 2,5 V et WiFi non provisionné
+    BLE_PROVISION --> WAIT_VOLTAGE: identifiants stockés / V faible
+    WAIT_VOLTAGE --> ACTIVE: V ≥ 2,5 V et WiFi provisionné
     ACTIVE --> WAIT_VOLTAGE: V faible (fallback)
 
     state ACTIVE {
@@ -81,12 +88,28 @@ stateDiagram-v2
 |------|------|----------------------|
 | `INIT` | Init NVS, LEDs, ADC, gestion d'énergie | Cyan |
 | `WAIT_VOLTAGE` | Attend que le supercondensateur soit chargé (≥ 2,5 V) | Rouge |
+| `BLE_PROVISION` | Provisioning BLE des identifiants WiFi, sans scan ni validation WiFi immédiate | Blanc |
 | `WIFI_CONNECT` | Connexion WiFi (avec cache BSSID/canal), retry interne en cas d'échec | Bleu |
 | `MQTT_CONNECT` | Connexion au broker MQTT + auto-découverte HA, retry interne si broker indisponible | Magenta |
 | `WAIT_ULP_DATA` | Init ULP + attente d'une trame TIC complète, CPU en *light sleep* | Jaune |
 | `PUBLISH_DATA` | Lecture buffer ULP, validation checksum (par groupe d'information), publication MQTT | Vert |
 
 > **Fallback tension (`ACTIVE → WAIT_VOLTAGE`)** : dans tous les états regroupés sous `ACTIVE`, la FSM retombe vers `WAIT_VOLTAGE` si la tension descend sous `VOLTAGE_FALLBACK_MIN_MV` (1,5 V) **ou** chute de plus de 200 mV par rapport au pic atteint depuis l'entrée dans l'état (seuil dynamique). Les connexions WiFi/MQTT sont alors arrêtées.
+
+### Provisioning WiFi BLE
+
+Si aucun identifiant WiFi n'est présent dans la NVS WiFi ESP-IDF, la FSM entre dans l'état `BLE_PROVISION` dès que la tension du supercondensateur est suffisante. Le service BLE apparaît sous le nom `Linkey-XXXXXX`, dérivé de l'adresse MAC.
+
+Le provisioning utilise le protocole standard de l'application Espressif, avec les contraintes basse consommation suivantes :
+
+- Le scan WiFi demandé par l'application est remplacé par une réponse vide. Il faut donc saisir le SSID manuellement.
+- Les identifiants reçus sont enregistrés dans la NVS WiFi avec `esp_wifi_set_config()`.
+- Le firmware répond ensuite à l'application comme si la connexion WiFi était validée, mais ne lance pas de connexion WiFi pendant le provisioning.
+- Après succès, BLE/WiFi sont arrêtés et la FSM retourne à `WAIT_VOLTAGE`. La connexion WiFi réelle est effectuée plus tard par `WIFI_CONNECT`, sous contrôle des seuils de tension.
+
+Le *Proof of Possession* est configuré dans `menuconfig` via **Provisioning Proof of Possession**. Par défaut : `linkey-pop`.
+
+Quand **Enable debug logging** est activé, le firmware imprime aussi un QR code compatible avec l'application Espressif dans le moniteur série. Le lien de provisioning est toujours imprimé pour faciliter le diagnostic.
 
 ### Topics MQTT
 
@@ -237,15 +260,14 @@ Naviguer dans **« Linkey Monitor Configuration »** et configurer :
 
 #### Paramètres requis :
 - **Device Name** : nom affiché dans Home Assistant (par défaut : `Linkey`)
-- **WiFi SSID** : nom de votre réseau WiFi
-- **WiFi Password** : mot de passe WiFi
 - **MQTT Broker URI** : ex. `mqtt://192.168.1.100`
 - **MQTT Topic Prefix** : par défaut `linkey` (topics : `linkey/state`, `linkey/status`)
+- **Provisioning Proof of Possession** : code demandé par l'application Espressif
 
 #### Paramètres optionnels :
 - **MQTT Username/Password** : si votre broker requiert une authentification
 - **Use Static IP** : à activer pour une connexion initiale plus rapide
-- **Enable debug logging** : pour le diagnostic
+- **Enable debug logging** : logs verbeux et QR code de provisioning dans le moniteur série
 
 ### 4. Compiler
 
@@ -258,6 +280,15 @@ idf.py build
 ```bash
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
+
+### 6. Provisionner le WiFi
+
+Au premier démarrage, si aucun identifiant WiFi n'est stocké :
+
+1. Ouvrir l'application Espressif de provisioning.
+2. Scanner le QR code affiché dans le moniteur série si les logs de debug sont activés, ou sélectionner manuellement le périphérique BLE `Linkey-XXXXXX`, puis entrer le *Proof of Possession* configuré dans `menuconfig`.
+3. Saisir le SSID et le mot de passe WiFi manuellement (la recherche de réseaux par l'ESP32 est volontairement désactivée).
+4. L'application doit terminer avec succès. Le firmware arrête ensuite le provisioning et attend à nouveau une tension suffisante avant de se connecter au WiFi.
 
 ## Tests
 
@@ -281,7 +312,7 @@ Temps d'exécution attendu : < 1 s pour les 13 cas actuels.
 Le workflow GitHub Actions `.github/workflows/ci.yml` lance à chaque *push* et *pull request* :
 
 1. **`host-tests`** — `ubuntu-latest`, build CMake + Unity + ctest.
-2. **`firmware-build`** — image Docker `espressif/idf:release-v5.4`, `idf.py build` complet pour valider que les refactorings ne cassent pas la compilation du firmware.
+2. **`firmware-build`** — image Docker `espressif/idf:release-v5.4`, `idf.py build` complet pour valider que les refactorings ne cassent pas la compilation du firmware. La matrice couvre aussi une configuration avec `CONFIG_LINKEY_DEBUG_LOGS=y`, qui active notamment le QR code de provisioning.
 
 ### Ajouter un nouveau test
 
@@ -310,3 +341,4 @@ Le code du firmware (`Firmware/main/`) est distribué sous **licence MIT**. Voir
 
 - **HULP** (`Firmware/HULP/`, sous-module Git) — [MIT](HULP/LICENSE), © 2019 Matt
 - **ESP-IDF** — [Apache 2.0](https://github.com/espressif/esp-idf/blob/master/LICENSE)
+- **espressif/qrcode** (`Firmware/main/idf_component.yml`) — composant ESP-IDF utilisé uniquement par les builds avec logs de debug pour afficher le QR code de provisioning
