@@ -17,6 +17,7 @@ Firmware/build/
 Firmware/build-debug/
 Firmware/build-qemu/
 Firmware/build-qemu-*/
+Firmware/managed_components/
 Firmware/sdkconfig*
 !Firmware/sdkconfig.defaults
 !Firmware/sdkconfig.ci-debug.defaults
