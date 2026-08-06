@@ -87,6 +87,8 @@ static bool ulp_initialized = false;
 
 // Task handle for ULP wake notification
 static TaskHandle_t main_task_handle;
+static TaskHandle_t ble_provision_led_task_handle = NULL;
+static volatile bool ble_provision_led_blinking = false;
 
 // ULP wake ISR: notify main task when a new frame is received
 static void IRAM_ATTR ulp_isr(void *arg)
@@ -129,6 +131,38 @@ static void rgb_led_blink(uint8_t color, int duration_ms)
     rgb_led_set(color);
     vTaskDelay(pdMS_TO_TICKS(duration_ms));
     rgb_led_set(RGB_OFF);
+}
+
+static void ble_provision_led_task(void *arg)
+{
+    (void)arg;
+
+    while (ble_provision_led_blinking) {
+        rgb_led_blink(LED_COLOR_BLE_PROVISION, 10);
+        vTaskDelay(pdMS_TO_TICKS(1990));
+    }
+
+    rgb_led_set(RGB_OFF);
+    ble_provision_led_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+static void ble_provision_led_start(void)
+{
+    if (ble_provision_led_task_handle) {
+        return;
+    }
+
+    ble_provision_led_blinking = true;
+    ESP_ERROR_CHECK(xTaskCreate(ble_provision_led_task, "ble_prov_led", 2048,
+                                NULL, 1, &ble_provision_led_task_handle) == pdPASS
+        ? ESP_OK
+        : ESP_ERR_NO_MEM);
+}
+
+static void ble_provision_led_stop(void)
+{
+    ble_provision_led_blinking = false;
 }
 
 // Stop WiFi and MQTT (WiFi first to cut radio power immediately)
@@ -237,8 +271,10 @@ static app_state_t handle_state_ble_provision(void)
     }
 
     DEBUG_LOG(TAG, "Starting BLE WiFi provisioning...");
+    ble_provision_led_start();
     conn_result_t result = provisioning_start_ble(VOLTAGE_FALLBACK_MIN_MV,
                                                  POLL_INTERVAL_MS);
+    ble_provision_led_stop();
     if (result == CONN_OK) {
         DEBUG_LOG(TAG, "WiFi credentials stored - returning to WAIT_VOLTAGE");
         stop_all_connections();
