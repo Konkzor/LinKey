@@ -23,6 +23,7 @@
 static const char *TAG = "LINKY_MAIN";
 
 // RGB LED pin definitions
+#define BOOT_BUTTON_PIN     GPIO_NUM_0
 #define RGB_LED_RED_PIN     GPIO_NUM_13
 #define RGB_LED_GREEN_PIN   GPIO_NUM_15
 #define RGB_LED_BLUE_PIN    GPIO_NUM_2
@@ -50,6 +51,7 @@ static const char *TAG = "LINKY_MAIN";
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
 #define MQTT_CONNECT_TIMEOUT_MS 1000    // MQTT connection timeout
+#define BOOT_BUTTON_LONG_PRESS_MS 2000  // Hold BOOT/GPIO0 to reprovision
 // Timeout waiting for ULP data: frame-level reception needs at least 2 frame periods
 // (partial frame + first complete frame) before valid data is available
 #if defined(CONFIG_LINKEY_TARIFF_TEMPO)
@@ -89,6 +91,7 @@ static bool ulp_initialized = false;
 static TaskHandle_t main_task_handle;
 static TaskHandle_t ble_provision_led_task_handle = NULL;
 static volatile bool ble_provision_led_blinking = false;
+static volatile bool manual_provisioning_requested = false;
 
 // ULP wake ISR: notify main task when a new frame is received
 static void IRAM_ATTR ulp_isr(void *arg)
@@ -97,6 +100,8 @@ static void IRAM_ATTR ulp_isr(void *arg)
     vTaskNotifyGiveFromISR(*(TaskHandle_t *)arg, &woken);
     portYIELD_FROM_ISR(woken);
 }
+
+static bool boot_button_force_allowed(app_state_t state);
 
 static void rgb_led_init(void)
 {
@@ -115,6 +120,26 @@ static void rgb_led_init(void)
     gpio_set_level(RGB_LED_BLUE_PIN, 0);
 
     DEBUG_LOG(TAG, "RGB LEDs initialized (R:%d, G:%d, B:%d)", RGB_LED_RED_PIN, RGB_LED_GREEN_PIN, RGB_LED_BLUE_PIN);
+}
+
+static void boot_button_init(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BOOT_BUTTON_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    DEBUG_LOG(TAG, "BOOT button initialized (GPIO%d)", BOOT_BUTTON_PIN);
+}
+
+static bool boot_button_force_allowed(app_state_t state)
+{
+    return state != STATE_INIT
+        && state != STATE_WAIT_VOLTAGE
+        && state != STATE_BLE_PROVISION;
 }
 
 // Set LED to a color (from RGB_COLOR macro)
@@ -222,6 +247,7 @@ static app_state_t handle_state_init(void)
 
     // Initialize RGB LEDs
     rgb_led_init();
+    boot_button_init();
 
     // Initialize voltage monitoring
     voltage_init();
@@ -286,9 +312,74 @@ static app_state_t handle_state_ble_provision(void)
         return STATE_WAIT_VOLTAGE;
     }
 
+    if (wifi_has_config()) {
+        DEBUG_LOGW(TAG, "BLE provisioning failed - keeping previous credentials");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+
     DEBUG_LOGW(TAG, "BLE provisioning failed - retrying");
     stop_all_connections();
     return STATE_BLE_PROVISION;
+}
+
+static void poll_boot_button_for_reprovision(void)
+{
+    static bool was_pressed = false;
+    static bool must_release = false;
+    static uint32_t pressed_ms = 0;
+    static TickType_t last_poll_tick = 0;
+    TickType_t now = xTaskGetTickCount();
+    uint32_t elapsed_ms = (last_poll_tick == 0)
+        ? 0
+        : pdTICKS_TO_MS(now - last_poll_tick);
+    bool pressed = gpio_get_level(BOOT_BUTTON_PIN) == 0;
+
+    last_poll_tick = now;
+
+    if (!boot_button_force_allowed(current_state)) {
+        was_pressed = false;
+        must_release = false;
+        pressed_ms = 0;
+        return;
+    }
+
+    if (must_release) {
+        // Wait for a release before allowing another long-press request
+        if (!pressed) {
+            must_release = false;
+            pressed_ms = 0;
+        }
+        return;
+    } else if (pressed) {
+        // Start timing on a fresh press
+        if (!was_pressed) {
+            pressed_ms = 0;
+        } else {
+            pressed_ms += elapsed_ms;
+        }
+        // If the button has been pressed long enough:
+        //  - request manual provisioning
+        //  - and block further requests until the button is released
+        if (pressed_ms >= BOOT_BUTTON_LONG_PRESS_MS) {
+            manual_provisioning_requested = true;
+            must_release = true;
+        }
+    }
+
+    was_pressed = pressed;
+}
+
+static void handle_manual_provisioning_request(void)
+{
+    poll_boot_button_for_reprovision();
+
+    if (manual_provisioning_requested) {
+        manual_provisioning_requested = false;
+        DEBUG_LOGW(TAG, "BOOT button long pressed - requesting WiFi provisioning");
+        stop_all_connections();
+        current_state = STATE_BLE_PROVISION;
+    }
 }
 
 // STATE_WIFI_CONNECT: Initialize WiFi (once) and connect
@@ -454,6 +545,8 @@ void app_main(void)
                 current_state = next;
             }
         }
+
+        handle_manual_provisioning_request();
 
         // Blink LED for current state (10ms)
         rgb_led_blink(state_colors[current_state], 10);

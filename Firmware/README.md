@@ -53,6 +53,7 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
 - **Réception trame par trame** : l'ULP reçoit une trame TIC complète (terminée par ETX `0x03`) en double buffer RTC ping-pong, puis réveille le CPU
 - **Validation de checksum** : vérifie le checksum TIC Linky `(sum & 0x3F) + 0x20`
 - **Statut LED RGB** : flash bref (10 ms) à chaque itération de la FSM, couleur dépendant de l'état courant — la LED reste éteinte le reste du temps pour économiser l'énergie
+- **Provisioning manuel** : un appui long de plus de 2 s sur BOOT/GPIO0 force l'entrée en provisioning BLE sans effacer les identifiants WiFi existants
 - **Surveillance tension supercondensateur** : lecture de la tension du condensateur
 - **Logs de debug** : journalisation verbeuse configurable pour le diagnostic
 
@@ -69,6 +70,7 @@ stateDiagram-v2
     BLE_PROVISION --> WAIT_VOLTAGE: identifiants stockés / V faible
     WAIT_VOLTAGE --> ACTIVE: V ≥ 2,5 V et WiFi provisionné
     ACTIVE --> WAIT_VOLTAGE: V faible (fallback)
+    ACTIVE --> BLE_PROVISION: BOOT/GPIO0 maintenu > 2 s
 
     state ACTIVE {
         direction LR
@@ -100,12 +102,15 @@ stateDiagram-v2
 
 Si aucun identifiant WiFi n'est présent dans la NVS WiFi ESP-IDF, la FSM entre dans l'état `BLE_PROVISION` dès que la tension du supercondensateur est suffisante. Le service BLE apparaît sous le nom `Linkey-XXXXXX`, dérivé de l'adresse MAC.
 
+Il est aussi possible de forcer le provisioning depuis les états actifs en maintenant BOOT/GPIO0 plus de 2 s. Cette demande arrête WiFi/MQTT et entre en `BLE_PROVISION`, mais ne supprime pas les identifiants WiFi déjà stockés. Si le provisioning manuel échoue alors que des identifiants existent encore, le firmware les conserve et retourne à `WAIT_VOLTAGE`.
+
 Le provisioning utilise le protocole standard de l'application Espressif, avec les contraintes basse consommation suivantes :
 
 - Le scan WiFi demandé par l'application est remplacé par une réponse vide. Il faut donc saisir le SSID manuellement.
 - Les identifiants reçus sont enregistrés dans la NVS WiFi avec `esp_wifi_set_config()`.
 - Le firmware répond ensuite à l'application comme si la connexion WiFi était validée, mais ne lance pas de connexion WiFi pendant le provisioning.
 - Après succès, BLE/WiFi sont arrêtés et la FSM retourne à `WAIT_VOLTAGE`. La connexion WiFi réelle est effectuée plus tard par `WIFI_CONNECT`, sous contrôle des seuils de tension.
+- Les anciens identifiants ne sont remplacés que lorsque l'application soumet de nouveaux identifiants. Ils ne sont pas effacés au moment d'entrer en provisioning manuel.
 
 Le *Proof of Possession* est configuré dans `menuconfig` via **Provisioning Proof of Possession**. Par défaut : `linkey-pop`.
 
@@ -289,6 +294,8 @@ Au premier démarrage, si aucun identifiant WiFi n'est stocké :
 2. Scanner le QR code affiché dans le moniteur série si les logs de debug sont activés, ou sélectionner manuellement le périphérique BLE `Linkey-XXXXXX`, puis entrer le *Proof of Possession* configuré dans `menuconfig`.
 3. Saisir le SSID et le mot de passe WiFi manuellement (la recherche de réseaux par l'ESP32 est volontairement désactivée).
 4. L'application doit terminer avec succès. Le firmware arrête ensuite le provisioning et attend à nouveau une tension suffisante avant de se connecter au WiFi.
+
+Pour reprovisionner un appareil déjà configuré, maintenir BOOT/GPIO0 plus de 2 s pendant que l'appareil est dans un état actif. Les identifiants existants restent présents tant que l'application ne soumet pas de nouveaux identifiants.
 
 ## Tests
 
