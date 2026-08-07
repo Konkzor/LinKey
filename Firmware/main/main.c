@@ -40,7 +40,6 @@ static const char *TAG = "LINKY_MAIN";
 #define RGB_WHITE           RGB_COLOR(1, 1, 1)
 
 // State LED color configuration (easily customizable)
-#define LED_COLOR_INIT          RGB_CYAN
 #define LED_COLOR_WAIT_VOLTAGE  RGB_RED
 #define LED_COLOR_BLE_PROVISION RGB_WHITE
 #define LED_COLOR_WIFI_CONNECT     RGB_BLUE
@@ -65,11 +64,10 @@ static const char *TAG = "LINKY_MAIN";
 #endif
 #define POLL_INTERVAL_MS        100     // Polling interval in connect/wait loops
 
-static app_state_t current_state = STATE_INIT;
+static app_state_t current_state = STATE_WAIT_VOLTAGE;
 
 // State LED colors lookup table
 static const uint8_t state_colors[] = {
-    LED_COLOR_INIT,
     LED_COLOR_WAIT_VOLTAGE,
     LED_COLOR_BLE_PROVISION,
     LED_COLOR_WIFI_CONNECT,
@@ -137,8 +135,7 @@ static void boot_button_init(void)
 
 static bool boot_button_force_allowed(app_state_t state)
 {
-    return state != STATE_INIT
-        && state != STATE_WAIT_VOLTAGE
+    return state != STATE_WAIT_VOLTAGE
         && state != STATE_BLE_PROVISION;
 }
 
@@ -234,7 +231,7 @@ static app_state_t handle_state_mqtt_connect(void);
 static app_state_t handle_state_wait_ulp_data(void);
 static app_state_t handle_state_publish_data(void);
 
-// STATE_INIT: Initialize LED, ADC, pm_config
+// Initialize LED, ADC, pm_config
 static app_state_t handle_state_init(void)
 {
     // Initialize NVS (used for WiFi)
@@ -521,7 +518,9 @@ static app_state_t handle_state_publish_data(void)
 void app_main(void)
 {
     DEBUG_LOG(TAG, "Starting FSM...");
-    app_state_t previous_state = STATE_INIT;
+
+    current_state = handle_state_init();
+    app_state_t previous_state = current_state;
 
     while (1) {
         // Reset dynamic peak tracker on state transitions into dynamic states
@@ -532,10 +531,9 @@ void app_main(void)
             previous_state = current_state;
         }
 
-        // Voltage check only possible after INIT (ADC must be initialized first).
         // STATE_WIFI_CONNECT uses the fixed floor (peak hasn't been built up yet);
         // every other connected state uses the dynamic drop-from-peak threshold.
-        if (current_state != STATE_INIT && current_state != STATE_WAIT_VOLTAGE) {
+        if (current_state != STATE_WAIT_VOLTAGE) {
             bool low = (current_state == STATE_WIFI_CONNECT)
                 ? voltage_is_low(VOLTAGE_FALLBACK_MIN_MV)
                 : voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
@@ -553,9 +551,6 @@ void app_main(void)
 
         // Handle current state
         switch (current_state) {
-            case STATE_INIT:
-                current_state = handle_state_init();
-                break;
             case STATE_WAIT_VOLTAGE:
                 current_state = handle_state_wait_voltage();
                 break;

@@ -60,7 +60,7 @@ app_state_t fsm_after_publish_data(bool voltage_low,
 
 app_state_t fsm_voltage_watchdog_next(app_state_t current, bool voltage_low)
 {
-    if (current == STATE_INIT || current == STATE_WAIT_VOLTAGE) return current;
+    if (current == STATE_WAIT_VOLTAGE) return current;
     return voltage_low ? STATE_WAIT_VOLTAGE : current;
 }
 

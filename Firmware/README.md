@@ -6,7 +6,8 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
 
 ```
 ┌─────────────────────────────────────────────┐
-│  CPU principal (FSM) (réveil périodique)    │
+│  CPU principal (init + FSM)                 │
+│  Réveil périodique                          │
 │  • Surveillance tension avec seuils de      │
 │    fallback par état                        │
 │  • Provisioning WiFi BLE si nécessaire      │
@@ -64,8 +65,7 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
 ```mermaid
 stateDiagram-v2
     direction LR
-    [*] --> INIT
-    INIT --> WAIT_VOLTAGE
+    [*] --> WAIT_VOLTAGE
     WAIT_VOLTAGE --> BLE_PROVISION: V ≥ 2,5 V et WiFi non provisionné
     BLE_PROVISION --> WAIT_VOLTAGE: identifiants stockés / V faible
     WAIT_VOLTAGE --> ACTIVE: V ≥ 2,5 V et WiFi provisionné
@@ -88,7 +88,6 @@ stateDiagram-v2
 
 | État | Rôle | Couleur du flash LED |
 |------|------|----------------------|
-| `INIT` | Init NVS, LEDs, ADC, gestion d'énergie | Cyan |
 | `WAIT_VOLTAGE` | Attend que le supercondensateur soit chargé (≥ 2,5 V) | Rouge |
 | `BLE_PROVISION` | Provisioning BLE des identifiants WiFi, sans scan ni validation WiFi immédiate | Blanc |
 | `WIFI_CONNECT` | Connexion WiFi (avec cache BSSID/canal), retry interne en cas d'échec | Bleu |
@@ -97,6 +96,8 @@ stateDiagram-v2
 | `PUBLISH_DATA` | Lecture buffer ULP, validation checksum (par groupe d'information), publication MQTT | Vert |
 
 > **Fallback tension (`ACTIVE → WAIT_VOLTAGE`)** : dans tous les états regroupés sous `ACTIVE`, la FSM retombe vers `WAIT_VOLTAGE` si la tension descend sous `VOLTAGE_FALLBACK_MIN_MV` (1,5 V) **ou** chute de plus de 200 mV par rapport au pic atteint depuis l'entrée dans l'état (seuil dynamique). Les connexions WiFi/MQTT sont alors arrêtées.
+
+L'initialisation NVS, LED, ADC et gestion d'énergie est effectuée une seule fois au démarrage, avant l'entrée dans la FSM. Elle n'a donc pas de flash LED dédié.
 
 ### Provisioning WiFi BLE
 
@@ -299,7 +300,7 @@ Pour reprovisionner un appareil déjà configuré, maintenir BOOT/GPIO0 plus de 
 
 ## Tests
 
-Les tests unitaires *host* couvrent la logique pure extraite des modules — pour le moment uniquement `voltage_state.c` (seuils et suivi du pic dynamique). Le framework Unity est récupéré à la configuration via `FetchContent`.
+Les tests unitaires *host* couvrent la logique pure extraite des modules, notamment `voltage_state.c`, `fsm.c` et `tic_parser.c`. Le framework Unity est récupéré à la configuration via `FetchContent`.
 
 ### Exécuter localement
 
@@ -312,7 +313,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Temps d'exécution attendu : < 1 s pour les 13 cas actuels.
+Temps d'exécution attendu : < 1 s pour les tests actuels.
 
 ### Intégration continue (CI)
 
