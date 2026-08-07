@@ -212,6 +212,55 @@ jobs:
             Firmware/mqtt-${{ matrix.tariff }}.log
             Firmware/mosquitto-${{ matrix.tariff }}.log
 
+  qemu-manual-provisioning:
+    name: QEMU manual provisioning trigger
+    runs-on: ubuntu-latest
+    container: espressif/idf:release-v5.4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install QEMU (xtensa)
+        shell: bash
+        run: |
+          . $IDF_PATH/export.sh
+          python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
+
+      - name: Run manual provisioning trigger emulation
+        shell: bash
+        working-directory: Firmware
+        run: |
+          . $IDF_PATH/export.sh
+          eval "$(python "$IDF_PATH/tools/idf_tools.py" export)"
+
+          ./run_qemu_linkey.sh \
+            --tariff_option base \
+            --manual-provision-test \
+            --build-only
+
+          timeout 45s ./run_qemu_linkey.sh \
+            --tariff_option base \
+            --manual-provision-test > qemu-manual-provisioning.log 2>&1 || true
+
+          echo "---- qemu-manual-provisioning.log ----"
+          cat qemu-manual-provisioning.log
+
+      - name: Assert manual provisioning trigger
+        shell: bash
+        working-directory: Firmware
+        run: |
+          python3 test/qemu/assert_manual_provisioning.py \
+            --qemu-log qemu-manual-provisioning.log
+
+      - name: Upload manual provisioning QEMU log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: qemu-manual-provisioning-log
+          path: Firmware/qemu-manual-provisioning.log
+
   pcb-drc:
     name: KiCad DRC
     runs-on: ubuntu-latest

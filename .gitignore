@@ -23,7 +23,7 @@ Firmware/sdkconfig*
 !Firmware/sdkconfig.ci-debug.defaults
 Firmware/.cache/
 Firmware/test/host/build/
-qemu.log
+*.log
 __pycache__/
 *.pyc
 

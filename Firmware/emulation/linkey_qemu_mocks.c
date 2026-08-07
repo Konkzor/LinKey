@@ -8,10 +8,13 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_pm.h"
+#include "esp_timer.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "hulp.h"
 #include "qemu_test_data.h"
+#include "provisioning_manager.h"
 #include "ulp_linky.h"
 #include "voltage_manager.h"
 #include "wifi_manager.h"
@@ -25,6 +28,9 @@ static esp_eth_handle_t qemu_eth_handle;
 static esp_eth_netif_glue_handle_t qemu_eth_glue;
 static bool qemu_eth_has_ip;
 static const uint8_t qemu_wifi_sta_mac[6] = {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+#if defined(LINKEY_QEMU_MANUAL_PROVISION_TEST)
+static bool qemu_boot_press_logged;
+#endif
 
 static const char *qemu_selected_frame(int *len)
 {
@@ -139,6 +145,26 @@ esp_err_t __wrap_esp_pm_configure(const esp_pm_config_t *config)
     (void)config;
     ESP_LOGI(TAG, "Power management skipped for QEMU emulation");
     return ESP_OK;
+}
+
+int __real_gpio_get_level(gpio_num_t gpio_num);
+
+int __wrap_gpio_get_level(gpio_num_t gpio_num)
+{
+    if (gpio_num == GPIO_NUM_0) {
+#if defined(LINKEY_QEMU_MANUAL_PROVISION_TEST)
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        bool pressed = now_ms >= 5000 && now_ms < 12000;
+        if (pressed && !qemu_boot_press_logged) {
+            ESP_LOGI(TAG, "QEMU manual BOOT/GPIO0 press active");
+            qemu_boot_press_logged = true;
+        }
+        return pressed ? 0 : 1;
+#else
+        return 1;
+#endif
+    }
+    return __real_gpio_get_level(gpio_num);
 }
 
 esp_err_t __real_esp_read_mac(uint8_t *mac, esp_mac_type_t type);
@@ -297,7 +323,21 @@ conn_result_t __wrap_wifi_connect(wifi_state_t *state,
     return CONN_FAILED;
 }
 
+bool __wrap_wifi_has_config(void)
+{
+    return true;
+}
+
 bool __wrap_wifi_is_connected(void)
 {
     return qemu_eth_has_ip;
+}
+
+conn_result_t provisioning_start_ble(uint16_t voltage_threshold,
+                                     uint32_t poll_interval_ms)
+{
+    (void)voltage_threshold;
+    (void)poll_interval_ms;
+    ESP_LOGE(TAG, "BLE provisioning is not supported in QEMU emulation");
+    return CONN_FAILED;
 }
