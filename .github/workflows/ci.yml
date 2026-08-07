@@ -142,12 +142,13 @@ jobs:
 
           ./run_qemu_linkey.sh --tariff_option "$TARIFF_OPTION" --build > "qemu-${TARIFF_OPTION}.log" 2>&1 &
           QEMU_PID=$!
+          QEMU_TOPIC_PREFIX="linkey/ddeeff"
 
           deadline=$((SECONDS + 300))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            if grep -Fxq "linkey/status online" "mqtt-${TARIFF_OPTION}.log" \
+            if grep -Fxq "${QEMU_TOPIC_PREFIX}/status online" "mqtt-${TARIFF_OPTION}.log" \
               && grep -Eq '^homeassistant/device/linkey_[0-9a-f]{12}/config ' "mqtt-${TARIFF_OPTION}.log" \
-              && grep -Eq '^linkey/state ' "mqtt-${TARIFF_OPTION}.log"; then
+              && grep -Eq "^${QEMU_TOPIC_PREFIX}/state " "mqtt-${TARIFF_OPTION}.log"; then
               break
             fi
             if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -162,11 +163,11 @@ jobs:
             sleep 2
           done
 
-          mosquitto_pub -h localhost -p 1884 -t linkey/debug/request -m GET_TIC_FRAME
+          mosquitto_pub -h localhost -p 1884 -t "${QEMU_TOPIC_PREFIX}/debug/request" -m GET_TIC_FRAME
 
           deadline=$((SECONDS + 60))
           while [ "$SECONDS" -lt "$deadline" ]; do
-            if grep -Eq '^linkey/debug/tic_frame ' "mqtt-${TARIFF_OPTION}.log"; then
+            if grep -Eq "^${QEMU_TOPIC_PREFIX}/debug/tic_frame " "mqtt-${TARIFF_OPTION}.log"; then
               break
             fi
             if ! kill -0 "$QEMU_PID" 2>/dev/null; then

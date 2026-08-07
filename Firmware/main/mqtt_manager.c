@@ -4,8 +4,13 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_mac.h"
+#include "esp_log.h"
 #include "debug.h"
 #include "types.h"
+
+#if CONFIG_LINKEY_MQTT_AUTODISCOVERY
+#include "mdns.h"
+#endif
 
 static const char *TAG = "MQTT_MGR";
 
@@ -13,12 +18,6 @@ static const char *TAG = "MQTT_MGR";
 #define MQTT_BROKER_URI CONFIG_LINKEY_MQTT_BROKER_URI
 #define MQTT_USERNAME   CONFIG_LINKEY_MQTT_USERNAME
 #define MQTT_PASSWORD   CONFIG_LINKEY_MQTT_PASSWORD
-
-// MQTT topics
-#define MQTT_TOPIC_STATE  CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/state"
-#define MQTT_TOPIC_STATUS CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/status"
-#define MQTT_TOPIC_DEBUG_REQ CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/debug/request"
-#define MQTT_TOPIC_DEBUG_FRAME CONFIG_LINKEY_MQTT_TOPIC_PREFIX "/debug/tic_frame"
 
 // Home Assistant discovery prefix
 #define HA_DISCOVERY_PREFIX "homeassistant"
@@ -42,6 +41,95 @@ static const char *TAG = "MQTT_MGR";
 
 // Cached MAC address string
 static char device_mac_str[13] = {0};  // 12 hex chars + null
+static char default_mqtt_username[14] = {0};  // "linkey_" + 6 hex chars + null
+static char mqtt_topic_state[20];       // "linkey/" + 6 hex chars + "/state" + null
+static char mqtt_topic_status[21];      // "linkey/" + 6 hex chars + "/status" + null
+static char mqtt_topic_debug_req[28];   // "linkey/" + 6 hex chars + "/debug/request" + null
+static char mqtt_topic_debug_frame[31]; // "linkey/" + 6 hex chars + "/debug/tic_frame" + null
+
+#if CONFIG_LINKEY_MQTT_AUTODISCOVERY
+#define MQTT_DISCOVERY_TIMEOUT_MS 3000
+#define MQTT_DISCOVERY_MAX_RESULTS 2
+
+static bool mdns_started;
+static char discovered_mqtt_uri[64];
+
+static bool mqtt_uri_from_result(const mdns_result_t *result, uint16_t broker_port,
+                                 bool use_result_port, char *uri, size_t uri_len)
+{
+    for (const mdns_result_t *r = result; r; r = r->next) {
+        uint16_t port = use_result_port && r->port ? r->port : broker_port;
+        for (const mdns_ip_addr_t *addr = r->addr; addr; addr = addr->next) {
+            if (addr->addr.type == ESP_IPADDR_TYPE_V4) {
+                int written = snprintf(uri, uri_len, "mqtt://" IPSTR ":%u",
+                                       IP2STR(&addr->addr.u_addr.ip4), port);
+                return written > 0 && (size_t)written < uri_len;
+            }
+        }
+
+        if (r->hostname && r->hostname[0]) {
+            int written = snprintf(uri, uri_len, "mqtt://%s.local:%u",
+                                   r->hostname, port);
+            return written > 0 && (size_t)written < uri_len;
+        }
+    }
+
+    return false;
+}
+
+static bool mqtt_discover_service(const char *service, uint16_t broker_port,
+                                  bool use_result_port, char *uri, size_t uri_len)
+{
+    mdns_result_t *results = NULL;
+    esp_err_t err = mdns_query_ptr(service, "_tcp", MQTT_DISCOVERY_TIMEOUT_MS,
+                                   MQTT_DISCOVERY_MAX_RESULTS, &results);
+    bool found = false;
+
+    if (err == ESP_OK && results) {
+        found = mqtt_uri_from_result(results, broker_port, use_result_port,
+                                     uri, uri_len);
+    }
+
+    if (results) {
+        mdns_query_results_free(results);
+    }
+
+    return found;
+}
+
+static const char *mqtt_broker_uri(void)
+{
+    if (discovered_mqtt_uri[0]) {
+        return discovered_mqtt_uri;
+    }
+
+    if (!mdns_started) {
+        esp_err_t err = mdns_init();
+        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+            ESP_LOGW(TAG, "mDNS init failed (%s), using MQTT fallback URI",
+                     esp_err_to_name(err));
+            return MQTT_BROKER_URI;
+        }
+        mdns_started = true;
+    }
+
+    if (mqtt_discover_service("_home-assistant", 1883, false, discovered_mqtt_uri,
+                              sizeof(discovered_mqtt_uri))) {
+        ESP_LOGI(TAG, "Home Assistant discovered via mDNS, using MQTT URI: %s",
+                 discovered_mqtt_uri);
+        return discovered_mqtt_uri;
+    }
+
+    ESP_LOGI(TAG, "No MQTT broker discovered with mDNS, using fallback URI: %s",
+             MQTT_BROKER_URI);
+    return MQTT_BROKER_URI;
+}
+#else
+static const char *mqtt_broker_uri(void)
+{
+    return MQTT_BROKER_URI;
+}
+#endif
 
 // Get device MAC address as lowercase hex string
 static const char* get_device_mac_str(void)
@@ -55,11 +143,43 @@ static const char* get_device_mac_str(void)
     return device_mac_str;
 }
 
+static const char *mqtt_username(void)
+{
+    if (strlen(MQTT_USERNAME) > 0) {
+        return MQTT_USERNAME;
+    }
+
+    if (default_mqtt_username[0] == 0) {
+        const char *mac = get_device_mac_str();
+        snprintf(default_mqtt_username, sizeof(default_mqtt_username),
+                 "linkey_%s", mac + 6);
+    }
+
+    return default_mqtt_username;
+}
+
+static void mqtt_topics_init(void)
+{
+    if (mqtt_topic_state[0] != 0) {
+        return;
+    }
+
+    const char *mac = get_device_mac_str();
+    const char *suffix = mac + 6;
+    snprintf(mqtt_topic_state, sizeof(mqtt_topic_state), "linkey/%s/state", suffix);
+    snprintf(mqtt_topic_status, sizeof(mqtt_topic_status), "linkey/%s/status", suffix);
+    snprintf(mqtt_topic_debug_req, sizeof(mqtt_topic_debug_req),
+             "linkey/%s/debug/request", suffix);
+    snprintf(mqtt_topic_debug_frame, sizeof(mqtt_topic_debug_frame),
+             "linkey/%s/debug/tic_frame", suffix);
+}
+
 // Publish Home Assistant device discovery config (single payload for all sensors)
 // Topic: homeassistant/device/linkey_<mac>/config
 static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 {
     const char *mac = get_device_mac_str();
+    mqtt_topics_init();
     char topic[128];
     char payload[4096];
     int offset = 0;
@@ -321,7 +441,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
         "\"stat_t\":\"%s\","
         "\"avty_t\":\"%s\""
         "}",
-        MQTT_TOPIC_STATE, MQTT_TOPIC_STATUS);
+        mqtt_topic_state, mqtt_topic_status);
 
     DEBUG_LOG(TAG, "HA discovery payload size: %d bytes", offset);
 
@@ -333,14 +453,14 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
 // Subscribe to debug request topic
 static void mqtt_subscribe_debug_topic(esp_mqtt_client_handle_t client)
 {
-    esp_mqtt_client_subscribe(client, MQTT_TOPIC_DEBUG_REQ, 1);
+    esp_mqtt_client_subscribe(client, mqtt_topic_debug_req, 1);
     DEBUG_LOG(TAG, "Subscribed to debug request topic");
 }
 
 // Publish online status to availability topic
 static void mqtt_publish_online(esp_mqtt_client_handle_t client)
 {
-    esp_mqtt_client_publish(client, MQTT_TOPIC_STATUS, "online", 0, 1, 1);
+    esp_mqtt_client_publish(client, mqtt_topic_status, "online", 0, 1, 1);
     DEBUG_LOG(TAG, "Published: online");
 }
 
@@ -376,7 +496,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base,
             esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
             if (event->topic_len > 0 && event->data_len > 0) {
                 // Check if this is a debug request message
-                if (strncmp(event->topic, MQTT_TOPIC_DEBUG_REQ, event->topic_len) == 0) {
+                if (event->topic_len == strlen(mqtt_topic_debug_req)
+                    && strncmp(event->topic, mqtt_topic_debug_req, event->topic_len) == 0) {
                     // Check for magic word "GET_TIC_FRAME"
                     if (event->data_len >= 12 && strncmp(event->data, "GET_TIC_FRAME", 13) == 0) {
                         DEBUG_LOG(TAG, "Debug request received: GET_TIC_FRAME");
@@ -397,12 +518,14 @@ void mqtt_init(mqtt_state_t *state)
         return;
     }
 
+    const char *broker_uri = mqtt_broker_uri();
+    mqtt_topics_init();
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = MQTT_BROKER_URI,
+        .broker.address.uri = broker_uri,
         .session.keepalive = 5,  // Reduced from 30s for faster disconnect detection
         .session.disable_clean_session = 0,
         .session.last_will = {
-            .topic = MQTT_TOPIC_STATUS,
+            .topic = mqtt_topic_status,
             .msg = "offline",
             .msg_len = 7,
             .qos = 1,
@@ -414,9 +537,7 @@ void mqtt_init(mqtt_state_t *state)
         .buffer.out_size = 4096,
     };
 
-    if (strlen(MQTT_USERNAME) > 0) {
-        mqtt_cfg.credentials.username = MQTT_USERNAME;
-    }
+    mqtt_cfg.credentials.username = mqtt_username();
     if (strlen(MQTT_PASSWORD) > 0) {
         mqtt_cfg.credentials.authentication.password = MQTT_PASSWORD;
     }
@@ -629,7 +750,7 @@ bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data)
     snprintf(payload + offset, sizeof(payload) - offset, "}");
 
     // Publish single JSON to state topic (QoS 1)
-    int ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_STATE, payload, 0, 1, 0);
+    int ret = esp_mqtt_client_publish(state->client, mqtt_topic_state, payload, 0, 1, 0);
     if (ret < 0) {
         DEBUG_LOGW(TAG, "Failed to publish state");
         return false;
@@ -645,7 +766,7 @@ bool mqtt_publish_tic_frame_debug(mqtt_state_t *state, const char *frame, int fr
         return false;
     }
 
-    int ret = esp_mqtt_client_publish(state->client, MQTT_TOPIC_DEBUG_FRAME, frame, frame_len, 1, 0);
+    int ret = esp_mqtt_client_publish(state->client, mqtt_topic_debug_frame, frame, frame_len, 1, 0);
     if (ret < 0) {
         DEBUG_LOGW(TAG, "Failed to publish debug frame");
         return false;

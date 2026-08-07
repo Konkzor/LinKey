@@ -89,7 +89,7 @@ bool mqtt_is_connected(mqtt_state_t *state);
 bool mqtt_publish_linky_data(mqtt_state_t *state, linky_data_t *data);
 
 /**
- * @brief Publish raw TIC frame to debug topic (linkey/debug/tic_frame)
+ * @brief Publish raw TIC frame to debug topic (linkey/<mac_suffix>/debug/tic_frame)
  *
  * @param[in] state      MQTT state structure
  * @param[in] frame      Raw TIC frame buffer (including STX/ETX)

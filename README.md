@@ -50,9 +50,13 @@ Démarrage rapide :
 git clone --recurse-submodules https://github.com/Konkzor/LinKey.git
 cd LinKey/Firmware
 source ~/esp/v5.4.1/esp-idf/export.sh
-idf.py menuconfig    # Configurer vos credentials WiFi et MQTT
+idf.py menuconfig    # Configurer l'appareil et les options MQTT
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
+
+Les identifiants WiFi sont provisionnés ensuite en BLE via l'application Espressif. Le firmware tente de découvrir Home Assistant en mDNS pour construire automatiquement l'URI MQTT (`mqtt://<ha-ip>:1883`), puis utilise `mqtt://homeassistant.local:1883` comme solution de repli.
+
+L'identité MQTT par défaut est dérivée de l'adresse MAC WiFi : utilisateur `linkey_<suffixe_mac>` et topics `linkey/<suffixe_mac>/...`, par exemple `linkey/8ebde0/state`.
 
 ## PCB
 

@@ -19,6 +19,10 @@ if(CONFIG_LINKEY_DEBUG_LOGS)
     list(APPEND linkey_requires qrcode)
 endif()
 
+if(CONFIG_LINKEY_MQTT_AUTODISCOVERY)
+    list(APPEND linkey_requires mdns)
+endif()
+
 idf_component_register(
     SRCS ${linkey_sources}
     INCLUDE_DIRS "."

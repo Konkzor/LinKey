@@ -41,6 +41,7 @@ Ce firmware utilise le coprocesseur ULP (*Ultra Low Power*) de l'ESP32 pour surv
   - *Modem sleep* WiFi pour économie d'énergie
   - IP statique optionnelle (court-circuite le DHCP)
 - **MQTT** :
+  - Découverte automatique du broker Home Assistant via mDNS (`_home-assistant._tcp.local`). Port imposé 1883.
   - QoS 1 pour une livraison fiable et une meilleure détection des coupures WiFi
   - Délais d'expiration courts
   - *Last Will and Testament* (LWT) pour le suivi de disponibilité
@@ -117,14 +118,42 @@ Le *Proof of Possession* est configuré dans `menuconfig` via **Provisioning Pro
 
 Quand **Enable debug logging** est activé, le firmware imprime aussi un QR code compatible avec l'application Espressif dans le moniteur série. Le lien de provisioning est toujours imprimé pour faciliter le diagnostic.
 
+### Découverte du broker MQTT
+
+Après la connexion WiFi, le firmware tente de découvrir Home Assistant via mDNS en interrogeant le service `_home-assistant._tcp.local`. Home Assistant annonce son service HTTP sur ce nom ; le firmware récupère l'adresse IP annoncée puis construit l'URI MQTT avec le port standard `1883` :
+
+```text
+_home-assistant._tcp.local -> 192.168.1.16
+mqtt://192.168.1.16:1883
+```
+
+Si cette découverte échoue, le firmware utilise **MQTT Broker URI** comme repli. La valeur par défaut est `mqtt://homeassistant.local:1883`.
+
+Le firmware ne se base pas sur `_mqtt._tcp.local` : ce service générique peut être annoncé par d'autres équipements du réseau (box, routeur, services internes) et ne désigne pas nécessairement le broker MQTT utilisé par Home Assistant.
+
+La découverte ne fournit pas les identifiants MQTT. Si **MQTT Username** est laissé vide, le firmware utilise automatiquement `linkey_<suffixe_mac>`, où `<suffixe_mac>` correspond aux 6 derniers caractères hexadécimaux de l'adresse MAC WiFi. Exemple : `linkey_8ebde0`.
+
+Si le broker exige une authentification, il faut donc créer cet utilisateur côté Home Assistant/Mosquitto, ou renseigner un autre nom dans **MQTT Username**. **MQTT Password** reste à configurer si le broker exige un mot de passe.
+
 ### Topics MQTT
 
-Avec le préfixe par défaut `linkey` :
-- `linkey/state` — payload JSON contenant les données capteurs (seules les valeurs valides sont incluses) :
+Les topics ne sont pas configurables dans `menuconfig`. Ils sont dérivés automatiquement des 6 derniers caractères hexadécimaux de l'adresse MAC WiFi :
+
+```text
+linkey/<suffixe_mac>
+```
+
+Cela permet de connecter plusieurs clés linkey sur un même réseau sans configuration.
+
+Exemple pour un suffixe `8ebde0` :
+
+- `linkey/8ebde0/state` — payload JSON contenant les données capteurs (seules les valeurs valides sont incluses) :
   ```json
   {"iinst":3,"base":12345678,"papp":690,"adps":30,"vcap":2850,"uptime":3600}
   ```
-- `linkey/status` — disponibilité de l'appareil (`online`/`offline` via LWT)
+- `linkey/8ebde0/status` — disponibilité de l'appareil (`online`/`offline` via LWT)
+- `linkey/8ebde0/debug/request` — demande de publication de trame TIC brute
+- `linkey/8ebde0/debug/tic_frame` — trame TIC brute publiée à la demande
 
 **Note** : seules les valeurs Linky issues d'un groupe d'information avec un checksum valide **et qui ont changé depuis la dernière publication** sont incluses dans le JSON. `VCAP` et `uptime` sont toujours présents. Les index spécifiques à un tarif (HCHC/HCHP, EJPHN/EJPHPM, BBRH*) n'apparaissent que si le compteur est configuré avec le contrat correspondant.
 
@@ -266,12 +295,13 @@ Naviguer dans **« Linkey Monitor Configuration »** et configurer :
 
 #### Paramètres requis :
 - **Device Name** : nom affiché dans Home Assistant (par défaut : `Linkey`)
-- **MQTT Broker URI** : ex. `mqtt://192.168.1.100`
-- **MQTT Topic Prefix** : par défaut `linkey` (topics : `linkey/state`, `linkey/status`)
 - **Provisioning Proof of Possession** : code demandé par l'application Espressif
 
 #### Paramètres optionnels :
-- **MQTT Username/Password** : si votre broker requiert une authentification
+- **Auto-discover MQTT broker with mDNS** : activé par défaut ; découvre Home Assistant via `_home-assistant._tcp.local` et utilise le port MQTT `1883`
+- **MQTT Broker URI** : URI de repli si la découverte mDNS échoue (par défaut : `mqtt://homeassistant.local:1883`)
+- **MQTT Username** : optionnel ; si vide, le firmware utilise `linkey_<6 derniers caractères de la MAC WiFi>`
+- **MQTT Password** : si votre broker requiert une authentification
 - **Use Static IP** : à activer pour une connexion initiale plus rapide
 - **Enable debug logging** : logs verbeux et QR code de provisioning dans le moniteur série
 
@@ -336,6 +366,7 @@ L'approche actuelle teste uniquement la logique pure extraite. Étendre la couve
 - [Documentation ULP ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/ulp.html)
 - [Documentation TIC Linky](../Doc/Enedis-MOP-CPT_002E.pdf) — spécification TIC Linky (incluse dans `Doc/`)
 - [Gestion d'énergie ESP32](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/system/power_management.html)
+- [Découverte d'instance Home Assistant](https://developers.home-assistant.io/docs/api/instance_discovery/)
 - [Découverte MQTT HA](https://www.home-assistant.io/integrations/mqtt/#mqtt-discovery)
 
 ## Licence
@@ -350,3 +381,4 @@ Le code du firmware (`Firmware/main/`) est distribué sous **licence MIT**. Voir
 - **HULP** (`Firmware/HULP/`, sous-module Git) — [MIT](HULP/LICENSE), © 2019 Matt
 - **ESP-IDF** — [Apache 2.0](https://github.com/espressif/esp-idf/blob/master/LICENSE)
 - **espressif/qrcode** (`Firmware/main/idf_component.yml`) — composant ESP-IDF utilisé uniquement par les builds avec logs de debug pour afficher le QR code de provisioning
+- **espressif/mdns** (`Firmware/main/idf_component.yml`) — composant ESP-IDF utilisé pour découvrir l'instance Home Assistant sur le réseau local
