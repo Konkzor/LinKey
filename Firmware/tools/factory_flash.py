@@ -134,7 +134,7 @@ def load_or_create_config(mac: str, schema: dict[str, str]) -> dict:
     ble_name = f"Linkey_{suffix.upper()}"
     mqtt_username = f"linkey_{suffix}"
     ble_pop = random_secret(12)
-    mqtt_password = random_secret(24)
+    mqtt_password = random_secret(12)
     qr_payload = json.dumps(
         {
             "ver": PROV_QR_VERSION,
