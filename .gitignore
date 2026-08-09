@@ -15,6 +15,7 @@ PCB/MCAD files/*.FCBak
 # Firmware
 Firmware/build/
 Firmware/build-debug/
+Firmware/build-factory/
 Firmware/build-qemu/
 Firmware/build-qemu-*/
 Firmware/managed_components/
@@ -23,6 +24,7 @@ Firmware/sdkconfig*
 !Firmware/sdkconfig.ci-debug.defaults
 Firmware/.cache/
 Firmware/test/host/build/
+Firmware/factory/devices/
 *.log
 __pycache__/
 *.pyc
