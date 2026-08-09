@@ -9,16 +9,20 @@ import json
 import os
 import re
 import secrets
+import shutil
 import string
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
 
 REPO_FIRMWARE_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = REPO_FIRMWARE_DIR.parent
 PARTITION_CSV = REPO_FIRMWARE_DIR / "partitions.csv"
 SCHEMA_HEADER = REPO_FIRMWARE_DIR / "main" / "factory_config_schema.h"
+QUICK_START_TEMPLATE = REPO_ROOT / "Templates" / "Guide démarrage rapide" / "linkey_quick_start_guide_template.html"
 FACTORY_ROOT = REPO_FIRMWARE_DIR / "factory" / "devices"
 DEFAULT_BUILD_DIR = REPO_FIRMWARE_DIR / "build-factory"
 DEFAULT_SDKCONFIG = REPO_FIRMWARE_DIR / "sdkconfig.factory"
@@ -120,6 +124,8 @@ def device_paths(mac: str) -> dict[str, Path]:
         "csv": root / "factory_config.csv",
         "bin": root / "factory_config.bin",
         "quick_start": root / "quick_start.txt",
+        "quick_start_html": root / "quick_start.html",
+        "quick_start_pdf": root / "quick_start.pdf",
     }
 
 
@@ -166,7 +172,7 @@ def load_or_create_config(mac: str, schema: dict[str, str]) -> dict:
     }
 
 
-def write_config_files(config: dict, schema: dict[str, str]) -> None:
+def write_config_files(config: dict, schema: dict[str, str], chrome: str | None) -> None:
     paths = device_paths(config["mac"])
     paths["root"].mkdir(parents=True, exist_ok=True)
 
@@ -192,6 +198,88 @@ def write_config_files(config: dict, schema: dict[str, str]) -> None:
         ])
 
     paths["quick_start"].write_text(quick_start_text(config, schema), encoding="utf-8")
+    write_quick_start_guide(config, schema, paths, chrome)
+
+
+def write_quick_start_guide(config: dict, schema: dict[str, str],
+                            paths: dict[str, Path], chrome: str | None) -> None:
+    if not QUICK_START_TEMPLATE.exists():
+        print(f"Warning: quick start template not found: {QUICK_START_TEMPLATE}")
+        return
+
+    template = QUICK_START_TEMPLATE.read_text(encoding="utf-8")
+    provisioning_qr_url = (
+        "https://api.qrserver.com/v1/create-qr-code/"
+        f"?size=512x512&margin=12&data={quote(config['provisioning']['url'], safe='')}"
+    )
+    logo_path = (REPO_ROOT / "Doc" / "images" / "logo_linkey.png").resolve().as_uri()
+    template_image_dir = QUICK_START_TEMPLATE.parent / "images"
+    google_play_badge = (template_image_dir / "google-play-badge.png").resolve().as_uri()
+    app_store_badge = (template_image_dir / "app-store-badge.svg").resolve().as_uri()
+
+    html = template
+    html = html.replace("../../Doc/images/logo_linkey.png", logo_path)
+    html = html.replace("images/google-play-badge.png", google_play_badge)
+    html = html.replace("images/app-store-badge.svg", app_store_badge)
+    html = html.replace("{{mqtt_username}}", config["mqtt_username"])
+    html = html.replace("{{mqtt_user}}", config["mqtt_username"])
+    html = html.replace(
+        "{{mqtt_password}}",
+        config[schema["LINKEY_FACTORY_KEY_MQTT_PASSWORD"]],
+    )
+    html = html.replace(
+        "{{mqtt_pass}}",
+        config[schema["LINKEY_FACTORY_KEY_MQTT_PASSWORD"]],
+    )
+    html = html.replace("Linkey-&lt;MAC&gt;", config["ble_name"])
+    html = html.replace("Linkey_&lt;MAC&gt;", config["ble_name"])
+    html = html.replace("Linkey_MAC", config["ble_name"])
+    html = html.replace(
+        '<div class="provision-qr">QR CODE<br>PROVISIONING</div>',
+        (
+            '<div class="provision-qr">'
+            f'<img src="{provisioning_qr_url}" alt="QR code de provisioning Linkey">'
+            '</div>'
+        ),
+    )
+
+    paths["quick_start_html"].write_text(html, encoding="utf-8")
+    if chrome:
+        try:
+            generate_quick_start_pdf(paths["quick_start_html"], paths["quick_start_pdf"], chrome)
+        except subprocess.CalledProcessError as exc:
+            print(f"Warning: quick start PDF generation failed ({exc}); HTML guide was generated.")
+    else:
+        print("Warning: Chrome/Chromium not found; quick start PDF was not generated.")
+
+
+def find_chrome(explicit_path: str | None) -> str | None:
+    if explicit_path:
+        return explicit_path
+
+    for name in ("google-chrome", "chromium", "chromium-browser"):
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
+
+
+def generate_quick_start_pdf(html_path: Path, pdf_path: Path, chrome: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="linkey-chrome-") as user_data_dir:
+        run([
+            chrome,
+            "--headless",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-crash-reporter",
+            "--disable-crashpad",
+            "--allow-file-access-from-files",
+            f"--user-data-dir={user_data_dir}",
+            f"--print-to-pdf={pdf_path}",
+            "--print-to-pdf-no-header",
+            str(html_path.resolve().as_uri()),
+        ])
 
 
 def quick_start_text(config: dict, schema: dict[str, str]) -> str:
@@ -281,13 +369,16 @@ def main() -> int:
     parser.add_argument("--no-build", action="store_true", help="Skip idf.py build.")
     parser.add_argument("--no-flash", action="store_true", help="Generate files and print setup info only.")
     parser.add_argument("--factory-only", action="store_true", help="Flash only the factory_data partition.")
+    parser.add_argument("--chrome", help="Chrome/Chromium executable used to render the quick start PDF.")
+    parser.add_argument("--no-guide-pdf", action="store_true", help="Generate quick start HTML but skip PDF rendering.")
     args = parser.parse_args()
 
     idf_path = find_idf_path()
     schema = read_schema()
     mac = read_mac(args.port, args.esptool)
     config = load_or_create_config(mac, schema)
-    write_config_files(config, schema)
+    chrome = None if args.no_guide_pdf else find_chrome(args.chrome)
+    write_config_files(config, schema, chrome)
     factory_bin = generate_nvs_binary(config, schema, idf_path)
 
     if not args.no_build:
