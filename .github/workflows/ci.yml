@@ -128,6 +128,7 @@ jobs:
           MQTT_USERNAME="linkey_ddeeff"
           MQTT_PASSWORD="mqtt-password"
           mosquitto_passwd -b -c mosquitto-ci.passwd "$MQTT_USERNAME" "$MQTT_PASSWORD"
+          chmod 0644 mosquitto-ci.passwd
 
           cat > mosquitto-ci.conf <<'EOF'
           per_listener_settings false
