@@ -18,6 +18,28 @@ jobs:
       - name: Install build tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends cmake build-essential gcovr
 
+      - name: Validate factory flash tool
+        working-directory: Firmware
+        run: |
+          python3 -m py_compile tools/factory_flash.py
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          script = Path("tools/factory_flash.py")
+          spec = importlib.util.spec_from_file_location("factory_flash", script)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+
+          schema = module.read_schema()
+          assert schema["LINKEY_FACTORY_PARTITION_LABEL"] == "factory_data"
+          assert schema["LINKEY_FACTORY_NAMESPACE"] == "linkey"
+          assert schema["LINKEY_FACTORY_KEY_MQTT_PASSWORD"] == "mqtt-password"
+          assert schema["LINKEY_FACTORY_KEY_BLE_POP"] == "ble-pop"
+          assert schema["LINKEY_FACTORY_FALLBACK_MQTT_PASSWORD"] == "mqtt-password"
+          assert schema["LINKEY_FACTORY_FALLBACK_BLE_POP"] == "linkey-pop"
+          PY
+
       - name: Configure
         run: cmake -S Firmware/test/host -B Firmware/test/host/build -DENABLE_COVERAGE=ON
 
@@ -103,9 +125,14 @@ jobs:
           . $IDF_PATH/export.sh
           eval "$(python "$IDF_PATH/tools/idf_tools.py" export)"
 
+          MQTT_USERNAME="linkey_ddeeff"
+          MQTT_PASSWORD="mqtt-password"
+          mosquitto_passwd -b -c mosquitto-ci.passwd "$MQTT_USERNAME" "$MQTT_PASSWORD"
+
           cat > mosquitto-ci.conf <<'EOF'
           per_listener_settings false
-          allow_anonymous true
+          allow_anonymous false
+          password_file mosquitto-ci.passwd
           listener 1884 0.0.0.0
           protocol mqtt
           log_dest stdout
@@ -125,7 +152,7 @@ jobs:
 
           BROKER_READY=0
           for _ in $(seq 1 30); do
-            if mosquitto_pub -h localhost -p 1884 -t ci/probe -m ready >/dev/null 2>&1; then
+            if mosquitto_pub -h localhost -p 1884 -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t ci/probe -m ready >/dev/null 2>&1; then
               BROKER_READY=1
               break
             fi
@@ -137,7 +164,7 @@ jobs:
             exit 1
           fi
 
-          stdbuf -oL mosquitto_sub -h localhost -p 1884 -t '#' -v > "mqtt-${TARIFF_OPTION}.log" 2>&1 &
+          stdbuf -oL mosquitto_sub -h localhost -p 1884 -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t '#' -v > "mqtt-${TARIFF_OPTION}.log" 2>&1 &
           SUB_PID=$!
 
           ./run_qemu_linkey.sh --tariff_option "$TARIFF_OPTION" --build > "qemu-${TARIFF_OPTION}.log" 2>&1 &
@@ -163,7 +190,7 @@ jobs:
             sleep 2
           done
 
-          mosquitto_pub -h localhost -p 1884 -t "${QEMU_TOPIC_PREFIX}/debug/request" -m GET_TIC_FRAME
+          mosquitto_pub -h localhost -p 1884 -u "$MQTT_USERNAME" -P "$MQTT_PASSWORD" -t "${QEMU_TOPIC_PREFIX}/debug/request" -m GET_TIC_FRAME
 
           deadline=$((SECONDS + 60))
           while [ "$SECONDS" -lt "$deadline" ]; do
