@@ -165,7 +165,7 @@ static void get_service_name(char *service_name, size_t service_name_size)
 {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_STA);
-    snprintf(service_name, service_name_size, "Linkey-%02X%02X%02X",
+    snprintf(service_name, service_name_size, "Linkey_%02X%02X%02X",
              mac[3], mac[4], mac[5]);
 }
 

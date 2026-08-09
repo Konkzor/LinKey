@@ -131,7 +131,7 @@ def load_or_create_config(mac: str, schema: dict[str, str]) -> dict:
         with paths["json"].open("r", encoding="utf-8") as f:
             return json.load(f)
 
-    ble_name = f"Linkey-{suffix.upper()}"
+    ble_name = f"Linkey_{suffix.upper()}"
     mqtt_username = f"linkey_{suffix}"
     ble_pop = random_secret(12)
     mqtt_password = random_secret(24)

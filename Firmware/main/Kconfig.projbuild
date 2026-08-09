@@ -2,9 +2,10 @@ menu "Linkey Monitor Configuration"
 
     config LINKEY_DEVICE_NAME
         string "Device Name"
-        default "Linkey"
+        default ""
         help
-            Device name shown in Home Assistant.
+            Optional Home Assistant device name override.
+            Leave empty to use Linkey_<last 6 hex digits of the WiFi MAC>.
 
     config LINKEY_MQTT_BROKER_URI
         string "MQTT Broker URI"

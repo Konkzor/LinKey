@@ -42,6 +42,7 @@ static const char *TAG = "MQTT_MGR";
 // Cached MAC address string
 static char device_mac_str[13] = {0};  // 12 hex chars + null
 static char default_mqtt_username[14] = {0};  // "linkey_" + 6 hex chars + null
+static char device_display_name[32] = {0};
 static char mqtt_topic_state[20];       // "linkey/" + 6 hex chars + "/state" + null
 static char mqtt_topic_status[21];      // "linkey/" + 6 hex chars + "/status" + null
 static char mqtt_topic_debug_req[28];   // "linkey/" + 6 hex chars + "/debug/request" + null
@@ -158,6 +159,21 @@ static const char *mqtt_username(void)
     return default_mqtt_username;
 }
 
+static const char *ha_device_name(void)
+{
+    if (strlen(DEVICE_NAME) > 0) {
+        return DEVICE_NAME;
+    }
+
+    if (device_display_name[0] == 0) {
+        const char *mac = get_device_mac_str();
+        snprintf(device_display_name, sizeof(device_display_name),
+                 "Linkey_%s", mac + 6);
+    }
+
+    return device_display_name;
+}
+
 static void mqtt_topics_init(void)
 {
     if (mqtt_topic_state[0] != 0) {
@@ -201,7 +217,7 @@ static void mqtt_publish_ha_discovery(esp_mqtt_client_handle_t client)
             "\"hw\":\"%s\","
             "\"sn\":\"%s\""
         "},",
-        mac, DEVICE_NAME, DEVICE_MANUFACTURER, DEVICE_MODEL,
+        mac, ha_device_name(), DEVICE_MANUFACTURER, DEVICE_MODEL,
         FW_VERSION, HW_VERSION, mac);
 
     // Origin info

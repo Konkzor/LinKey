@@ -102,7 +102,7 @@ L'initialisation NVS, LED, ADC et gestion d'énergie est effectuée une seule fo
 
 ### Provisioning WiFi BLE
 
-Si aucun identifiant WiFi n'est présent dans la NVS WiFi ESP-IDF, la FSM entre dans l'état `BLE_PROVISION` dès que la tension du supercondensateur est suffisante. Le service BLE apparaît sous le nom `Linkey-XXXXXX`, dérivé de l'adresse MAC.
+Si aucun identifiant WiFi n'est présent dans la NVS WiFi ESP-IDF, la FSM entre dans l'état `BLE_PROVISION` dès que la tension du supercondensateur est suffisante. Le service BLE apparaît sous le nom `Linkey_XXXXXX`, dérivé de l'adresse MAC.
 
 Il est aussi possible de forcer le provisioning depuis les états actifs en maintenant BOOT/GPIO0 plus de 2 s. Cette demande arrête WiFi/MQTT et entre en `BLE_PROVISION`, mais ne supprime pas les identifiants WiFi déjà stockés. Si le provisioning manuel échoue alors que des identifiants existent encore, le firmware les conserve et retourne à `WAIT_VOLTAGE`.
 
@@ -134,7 +134,7 @@ python3 tools/factory_flash.py -p /dev/ttyUSB0
 
 L'outil lit l'adresse MAC de l'ESP32, crée le dossier `factory/devices/<mac>/` si nécessaire, puis réutilise les mêmes secrets aux exécutions suivantes. Il génère la partition NVS factory, lance `idf.py build`, flashe le firmware, flashe `factory_data`, puis affiche les informations à recopier dans Home Assistant et dans un guide de démarrage rapide :
 
-- nom BLE `Linkey-XXXXXX`
+- nom BLE `Linkey_XXXXXX`
 - contenu du QR code de provisioning et URL Espressif
 - utilisateur MQTT `linkey_<suffixe_mac>`
 - mot de passe MQTT
@@ -325,7 +325,7 @@ idf.py menuconfig
 Naviguer dans **« Linkey Monitor Configuration »** et configurer :
 
 #### Paramètres requis :
-- **Device Name** : nom affiché dans Home Assistant (par défaut : `Linkey`)
+- **Device Name** : override optionnel du nom affiché dans Home Assistant. Si vide, le firmware utilise `Linkey_<suffixe_mac>`, par exemple `Linkey_8ebde0`.
 - **Provisioning Proof of Possession** : code demandé par l'application Espressif
 
 #### Paramètres optionnels :
@@ -353,7 +353,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 Au premier démarrage, si aucun identifiant WiFi n'est stocké :
 
 1. Ouvrir l'application Espressif de provisioning.
-2. Scanner le QR code affiché dans le moniteur série si les logs de debug sont activés, ou sélectionner manuellement le périphérique BLE `Linkey-XXXXXX`, puis entrer le *Proof of Possession* configuré dans `menuconfig`.
+2. Scanner le QR code affiché dans le moniteur série si les logs de debug sont activés, ou sélectionner manuellement le périphérique BLE `Linkey_XXXXXX`, puis entrer le *Proof of Possession* configuré dans `menuconfig`.
 3. Saisir le SSID et le mot de passe WiFi manuellement (la recherche de réseaux par l'ESP32 est volontairement désactivée).
 4. L'application doit terminer avec succès. Le firmware arrête ensuite le provisioning et attend à nouveau une tension suffisante avant de se connecter au WiFi.
 
