@@ -33,14 +33,17 @@ menu "Linkey Monitor Configuration"
         string "MQTT Password"
         default ""
         help
-            Password for MQTT broker authentication (leave empty if not required).
+            Optional development override for the MQTT password.
+            Leave empty to use the fallback defined in factory_config_schema.h,
+            or the per-device value from the factory_data partition when present.
 
     config LINKEY_PROV_POP
         string "Provisioning Proof of Possession"
-        default "linkey-pop"
+        default ""
         help
-            Proof of possession used by the Espressif provisioning app.
-            This should be unique per device in production.
+            Optional development override for the Espressif provisioning PoP.
+            Leave empty to use the fallback defined in factory_config_schema.h,
+            or the per-device value from the factory_data partition when present.
 
     config LINKEY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"

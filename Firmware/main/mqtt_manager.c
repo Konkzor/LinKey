@@ -6,6 +6,7 @@
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "debug.h"
+#include "factory_config.h"
 #include "types.h"
 
 #if CONFIG_LINKEY_MQTT_AUTODISCOVERY
@@ -14,10 +15,9 @@
 
 static const char *TAG = "MQTT_MGR";
 
-// MQTT credentials from Kconfig
+// MQTT credentials from Kconfig/factory data
 #define MQTT_BROKER_URI CONFIG_LINKEY_MQTT_BROKER_URI
 #define MQTT_USERNAME   CONFIG_LINKEY_MQTT_USERNAME
-#define MQTT_PASSWORD   CONFIG_LINKEY_MQTT_PASSWORD
 
 // Home Assistant discovery prefix
 #define HA_DISCOVERY_PREFIX "homeassistant"
@@ -538,8 +538,9 @@ void mqtt_init(mqtt_state_t *state)
     };
 
     mqtt_cfg.credentials.username = mqtt_username();
-    if (strlen(MQTT_PASSWORD) > 0) {
-        mqtt_cfg.credentials.authentication.password = MQTT_PASSWORD;
+    const char *mqtt_password = factory_config_get_mqtt_password();
+    if (strlen(mqtt_password) > 0) {
+        mqtt_cfg.credentials.authentication.password = mqtt_password;
     }
 
     state->client = esp_mqtt_client_init(&mqtt_cfg);

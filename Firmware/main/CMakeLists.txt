@@ -7,6 +7,7 @@ set(linkey_sources
     "voltage_state.c"
     "wifi_manager.c"
     "mqtt_manager.c"
+    "factory_config.c"
     "fsm.c"
 )
 

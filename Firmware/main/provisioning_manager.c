@@ -17,6 +17,7 @@
 #include "wifi_provisioning/wifi_scan.h"
 #include "voltage_manager.h"
 #include "debug.h"
+#include "factory_config.h"
 
 static const char *TAG = "PROV_MGR";
 
@@ -168,20 +169,23 @@ static void get_service_name(char *service_name, size_t service_name_size)
              mac[3], mac[4], mac[5]);
 }
 
-static void print_provisioning_qr(const char *service_name)
+static void print_provisioning_qr(const char *service_name, const char *ble_pop)
 {
+#ifdef CONFIG_LINKEY_DEBUG_LOGS
     char payload[150] = {0};
     snprintf(payload, sizeof(payload),
              "{\"ver\":\"%s\",\"name\":\"%s\",\"pop\":\"%s\",\"transport\":\"%s\"}",
-             PROV_QR_VERSION, service_name, CONFIG_LINKEY_PROV_POP,
+             PROV_QR_VERSION, service_name, ble_pop,
              PROV_TRANSPORT_BLE);
 
-#ifdef CONFIG_LINKEY_DEBUG_LOGS
     ESP_LOGI(TAG, "Scan this QR code from the ESP provisioning app.");
     esp_qrcode_config_t cfg = ESP_QRCODE_CONFIG_DEFAULT();
     esp_qrcode_generate(&cfg, payload);
-#endif
     ESP_LOGI(TAG, "Provisioning URL:\n%s?data=%s", QRCODE_BASE_URL, payload);
+#else
+    (void)service_name;
+    (void)ble_pop;
+#endif
 }
 
 static void provisioning_event_handler(void *arg, esp_event_base_t event_base,
@@ -247,7 +251,8 @@ conn_result_t provisioning_start_ble(uint16_t voltage_threshold,
 
     ESP_ERROR_CHECK(wifi_prov_mgr_init(config));
 
-    const wifi_prov_security1_params_t *sec_params = CONFIG_LINKEY_PROV_POP;
+    const char *ble_pop = factory_config_get_ble_pop();
+    const wifi_prov_security1_params_t *sec_params = ble_pop;
     ESP_ERROR_CHECK(wifi_prov_mgr_start_provisioning(WIFI_PROV_SECURITY_1,
                                                      sec_params,
                                                      service_name,
@@ -267,9 +272,9 @@ conn_result_t provisioning_start_ble(uint16_t voltage_threshold,
                                                     &low_power_scan_handlers));
     DEBUG_LOG(TAG, "WiFi scan endpoint replaced with low-power empty scan");
 
-    DEBUG_LOG(TAG, "Provision with ESP app: name=%s pop=%s transport=ble security=1",
-              service_name, CONFIG_LINKEY_PROV_POP);
-    print_provisioning_qr(service_name);
+    DEBUG_LOG(TAG, "Provision with ESP app: name=%s transport=ble security=1",
+              service_name);
+    print_provisioning_qr(service_name, ble_pop);
 
     conn_result_t result = CONN_FAILED;
     while (1) {
