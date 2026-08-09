@@ -114,9 +114,40 @@ Le provisioning utilise le protocole standard de l'application Espressif, avec l
 - Après succès, BLE/WiFi sont arrêtés et la FSM retourne à `WAIT_VOLTAGE`. La connexion WiFi réelle est effectuée plus tard par `WIFI_CONNECT`, sous contrôle des seuils de tension.
 - Les anciens identifiants ne sont remplacés que lorsque l'application soumet de nouveaux identifiants. Ils ne sont pas effacés au moment d'entrer en provisioning manuel.
 
-Le *Proof of Possession* est configuré dans `menuconfig` via **Provisioning Proof of Possession**. Par défaut : `linkey-pop`.
+Le *Proof of Possession* est lu depuis la partition NVS `factory_data` quand elle est présente. Sinon, le firmware utilise le repli défini dans `factory_config_schema.h`, sauf override explicite via `menuconfig`.
 
-Quand **Enable debug logging** est activé, le firmware imprime aussi un QR code compatible avec l'application Espressif dans le moniteur série. Le lien de provisioning est toujours imprimé pour faciliter le diagnostic.
+Quand **Enable debug logging** est activé, le firmware imprime aussi un QR code compatible avec l'application Espressif dans le moniteur série. En usage normal, les informations de provisioning doivent venir de l'outil de flash factory, pas des logs firmware.
+
+### Flash factory et informations d'installation
+
+Le firmware contient une partition NVS dédiée `factory_data` pour les secrets propres à chaque appareil :
+
+- `ble-pop` : PoP utilisé par l'application Espressif pour le provisioning WiFi BLE
+- `mqtt-password` : mot de passe MQTT de l'utilisateur propre à l'appareil
+
+Ces secrets sont générés et flashés par l'outil Python :
+
+```bash
+cd Firmware
+python3 tools/factory_flash.py -p /dev/ttyUSB0
+```
+
+L'outil lit l'adresse MAC de l'ESP32, crée le dossier `factory/devices/<mac>/` si nécessaire, puis réutilise les mêmes secrets aux exécutions suivantes. Il génère la partition NVS factory, lance `idf.py build`, flashe le firmware, flashe `factory_data`, puis affiche les informations à recopier dans Home Assistant et dans un guide de démarrage rapide :
+
+- nom BLE `Linkey-XXXXXX`
+- contenu du QR code de provisioning et URL Espressif
+- utilisateur MQTT `linkey_<suffixe_mac>`
+- mot de passe MQTT
+- préfixe de topic `linkey/<suffixe_mac>`
+
+Pour préparer uniquement les fichiers sans flasher :
+
+```bash
+cd Firmware
+python3 tools/factory_flash.py -p /dev/ttyUSB0 --no-flash
+```
+
+Les replis de développement et QEMU sont définis dans `factory_config_schema.h` : `linkey-pop` pour le PoP BLE et `mqtt-password` pour MQTT. Les champs `menuconfig` **Provisioning Proof of Possession** et **MQTT Password** sont seulement des overrides optionnels ; laissez-les vides pour utiliser ces replis ou la partition `factory_data` quand elle est flashée.
 
 ### Découverte du broker MQTT
 
@@ -133,7 +164,7 @@ Le firmware ne se base pas sur `_mqtt._tcp.local` : ce service générique peut 
 
 La découverte ne fournit pas les identifiants MQTT. Si **MQTT Username** est laissé vide, le firmware utilise automatiquement `linkey_<suffixe_mac>`, où `<suffixe_mac>` correspond aux 6 derniers caractères hexadécimaux de l'adresse MAC WiFi. Exemple : `linkey_8ebde0`.
 
-Si le broker exige une authentification, il faut donc créer cet utilisateur côté Home Assistant/Mosquitto, ou renseigner un autre nom dans **MQTT Username**. **MQTT Password** reste à configurer si le broker exige un mot de passe.
+Si le broker exige une authentification, il faut donc créer cet utilisateur côté Home Assistant/Mosquitto, ou renseigner un autre nom dans **MQTT Username**. Le mot de passe MQTT est lu depuis la partition `factory_data` quand elle est présente ; sinon le firmware utilise le repli défini dans `factory_config_schema.h`, sauf override explicite par **MQTT Password**.
 
 ### Topics MQTT
 
