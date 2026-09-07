@@ -118,10 +118,10 @@ docker compose up -d mosquitto
 Pour observer les messages publiés par le firmware émulé :
 
 ```bash
-mosquitto_sub -h localhost -p 1884 -t "linkey/#" -v
+mosquitto_sub -h localhost -p 1884 -u linkey_ddeeff -P mqtt-password -t "linkey/#" -v
 ```
 
-Cette commande se connecte au broker local exposé sur le port `1884`, s'abonne à tous les topics sous `linkey/` et affiche chaque message reçu avec son topic.
+Cette commande se connecte au broker local exposé sur le port `1884`, s'abonne à tous les topics sous `linkey/` et affiche chaque message reçu avec son topic. Le broker QEMU refuse les connexions anonymes et attend les identifiants dérivés de la MAC mockée : `linkey_ddeeff` / `mqtt-password`.
 
 L'URI du broker QEMU est définie dans `emulation/sdkconfig.qemu.defaults`.
 

@@ -120,13 +120,6 @@ static void test_publish_happy_path_stays(void)
 
 // --- fsm_voltage_watchdog_next -------------------------------------------
 
-static void test_watchdog_init_passes_through_low(void)
-{
-    // STATE_INIT owns its own voltage handling (ADC not initialized yet);
-    // the watchdog must not pre-empt it.
-    TEST_ASSERT_EQUAL_INT(STATE_INIT, fsm_voltage_watchdog_next(STATE_INIT, true));
-}
-
 static void test_watchdog_wait_voltage_passes_through_low(void)
 {
     // STATE_WAIT_VOLTAGE already checks voltage; double-trigger is harmless
@@ -162,7 +155,6 @@ static void test_watchdog_drops_publish_to_wait_voltage(void)
 static void test_watchdog_voltage_ok_keeps_state(void)
 {
     // For every state, voltage_low=false must be a no-op.
-    TEST_ASSERT_EQUAL_INT(STATE_INIT,         fsm_voltage_watchdog_next(STATE_INIT, false));
     TEST_ASSERT_EQUAL_INT(STATE_WAIT_VOLTAGE, fsm_voltage_watchdog_next(STATE_WAIT_VOLTAGE, false));
     TEST_ASSERT_EQUAL_INT(STATE_WIFI_CONNECT, fsm_voltage_watchdog_next(STATE_WIFI_CONNECT, false));
     TEST_ASSERT_EQUAL_INT(STATE_MQTT_CONNECT, fsm_voltage_watchdog_next(STATE_MQTT_CONNECT, false));
@@ -181,7 +173,6 @@ static void test_reset_peak_true_for_dynamic_states(void)
 
 static void test_reset_peak_false_for_other_states(void)
 {
-    TEST_ASSERT_FALSE(fsm_should_reset_peak_on_enter(STATE_INIT));
     TEST_ASSERT_FALSE(fsm_should_reset_peak_on_enter(STATE_WAIT_VOLTAGE));
     TEST_ASSERT_FALSE(fsm_should_reset_peak_on_enter(STATE_WIFI_CONNECT));
 }
@@ -212,7 +203,6 @@ int main(void)
     RUN_TEST(test_publish_publish_failed_to_mqtt_connect);
     RUN_TEST(test_publish_happy_path_stays);
 
-    RUN_TEST(test_watchdog_init_passes_through_low);
     RUN_TEST(test_watchdog_wait_voltage_passes_through_low);
     RUN_TEST(test_watchdog_drops_wifi_connect_to_wait_voltage);
     RUN_TEST(test_watchdog_drops_mqtt_connect_to_wait_voltage);

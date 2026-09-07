@@ -17,3 +17,9 @@ endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     LINKEY_QEMU_TARIFF_OPTION_${LINKEY_QEMU_TARIFF_OPTION_UPPER}=1
 )
+
+if(LINKEY_QEMU_MANUAL_PROVISION_TEST)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        LINKEY_QEMU_MANUAL_PROVISION_TEST=1
+    )
+endif()
