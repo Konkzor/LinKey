@@ -60,13 +60,14 @@ app_state_t fsm_after_publish_data(bool voltage_low,
 
 app_state_t fsm_voltage_watchdog_next(app_state_t current, bool voltage_low)
 {
-    if (current == STATE_INIT || current == STATE_WAIT_VOLTAGE) return current;
+    if (current == STATE_WAIT_VOLTAGE) return current;
     return voltage_low ? STATE_WAIT_VOLTAGE : current;
 }
 
 bool fsm_should_reset_peak_on_enter(app_state_t state)
 {
-    return state == STATE_MQTT_CONNECT
+    return state == STATE_BLE_PROVISION
+        || state == STATE_MQTT_CONNECT
         || state == STATE_WAIT_ULP_DATA
         || state == STATE_PUBLISH_DATA;
 }

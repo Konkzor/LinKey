@@ -21,9 +21,11 @@ fi
 DEBUG_MODE=0
 USE_MONITOR=0
 BUILD_FIRST=0
+BUILD_ONLY=0
+MANUAL_PROVISION_TEST=0
 
 usage() {
-    echo "Usage: $0 [--build] [--debug] [--monitor] [--tariff_option base|hphc|ejp|tempo]"
+    echo "Usage: $0 [--build] [--build-only] [--debug] [--monitor] [--manual-provision-test] [--tariff_option base|hphc|ejp|tempo]"
 }
 
 while [ $# -gt 0 ]; do
@@ -32,12 +34,21 @@ while [ $# -gt 0 ]; do
             BUILD_FIRST=1
             shift
             ;;
+        --build-only)
+            BUILD_FIRST=1
+            BUILD_ONLY=1
+            shift
+            ;;
         --debug)
             DEBUG_MODE=1
             shift
             ;;
         --monitor)
             USE_MONITOR=1
+            shift
+            ;;
+        --manual-provision-test)
+            MANUAL_PROVISION_TEST=1
             shift
             ;;
         --tariff_option)
@@ -89,7 +100,12 @@ case "$TARIFF_OPTION" in
         ;;
 esac
 
-BUILD_DIR="${LINKEY_QEMU_BUILD_DIR:-${SCRIPT_DIR}/build-qemu-${TARIFF_OPTION}}"
+BUILD_DIR_SUFFIX="${TARIFF_OPTION}"
+if [ "$MANUAL_PROVISION_TEST" -eq 1 ]; then
+    BUILD_DIR_SUFFIX="${BUILD_DIR_SUFFIX}-manual-provision"
+fi
+
+BUILD_DIR="${LINKEY_QEMU_BUILD_DIR:-${SCRIPT_DIR}/build-qemu-${BUILD_DIR_SUFFIX}}"
 QEMU_FLASH="${BUILD_DIR}/qemu_flash.bin"
 QEMU_EFUSE="${BUILD_DIR}/qemu_efuse.bin"
 BUILD_APP_BIN="${BUILD_DIR}/linky-ulp-monitor.bin"
@@ -107,6 +123,7 @@ BUILD_CMD=(
     "-DSDKCONFIG_DEFAULTS=sdkconfig.defaults;emulation/sdkconfig.qemu.defaults;${TARIFF_DEFAULTS}"
     -DLINKEY_QEMU_EMULATION=ON
     -DLINKEY_QEMU_TARIFF_OPTION="$TARIFF_CMAKE"
+    -DLINKEY_QEMU_MANUAL_PROVISION_TEST="$MANUAL_PROVISION_TEST"
     build
 )
 
@@ -137,6 +154,11 @@ if [ ! -f "$QEMU_FLASH" ] || [ "$QEMU_FLASH_SIZE" -ne 2097152 ] || [ "$BUILD_APP
     # shellcheck disable=SC1091
     source "${IDF_PATH}/export.sh" >/dev/null 2>&1
     esptool.py --chip esp32 merge_bin --fill-flash-size 2MB -o "$QEMU_FLASH" @flash_args
+fi
+
+if [ "$BUILD_ONLY" -eq 1 ]; then
+    echo "QEMU build artifacts ready in ${BUILD_DIR}"
+    exit 0
 fi
 
 if [ ! -f "$QEMU_EFUSE" ]; then
@@ -184,6 +206,7 @@ echo "eFuse:     $QEMU_EFUSE"
 echo "QEMU:      $QEMU_CMD"
 echo "Build:     LINKEY_QEMU_EMULATION=ON"
 echo "Tariff:    $TARIFF_OPTION"
+echo "Manual provisioning test: $MANUAL_PROVISION_TEST"
 echo "=============================================="
 
 exec "$QEMU_CMD" "${QEMU_ARGS[@]}"

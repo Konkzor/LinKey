@@ -28,10 +28,7 @@ TARIFF_DISCOVERY_COMPONENTS = {
 
 COMMON_STATE_FIELDS = {"iinst", "papp", "vcap", "uptime"}
 QEMU_WIFI_STA_MAC = "aabbccddeeff"
-DEBUG_REQUEST_TOPIC = "linkey/debug/request"
 DEBUG_REQUEST_PAYLOAD = "GET_TIC_FRAME"
-DEBUG_FRAME_TOPIC = "linkey/debug/tic_frame"
-DEBUG_FRAME_TOPIC_BYTES = b"linkey/debug/tic_frame "
 
 EXPECTED_DEBUG_FRAMES = {
     "base": (
@@ -143,15 +140,25 @@ def assert_qemu_log(path: Path) -> None:
         fail("QEMU log contains a panic/assert/heap corruption marker")
 
 
-def assert_status(messages: list[tuple[str, str]]) -> None:
-    if ("linkey/status", "online") not in messages:
-        fail("Missing exact MQTT status message: linkey/status online")
+def topics_for_mac(mac: str) -> dict[str, str]:
+    prefix = f"linkey/{mac[-6:]}"
+    return {
+        "state": f"{prefix}/state",
+        "status": f"{prefix}/status",
+        "debug_request": f"{prefix}/debug/request",
+        "debug_frame": f"{prefix}/debug/tic_frame",
+    }
+
+
+def assert_status(messages: list[tuple[str, str]], topics: dict[str, str]) -> None:
+    if (topics["status"], "online") not in messages:
+        fail(f"Missing exact MQTT status message: {topics['status']} online")
 
 
 def assert_discovery(
     messages: list[tuple[str, str]],
     tariff_option: str,
-) -> None:
+) -> str:
     discovery_messages = [
         (topic, payload, DISCOVERY_TOPIC_RE.match(topic))
         for topic, payload in messages
@@ -182,10 +189,11 @@ def assert_discovery(
         fail(f"Discovery dev.ids mismatch: expected {expected_device_id!r}")
     if dev.get("sn") != topic_mac:
         fail(f"Discovery dev.sn mismatch: expected {topic_mac!r}")
-    if config.get("stat_t") != "linkey/state":
-        fail("Discovery stat_t must be exactly linkey/state")
-    if config.get("avty_t") != "linkey/status":
-        fail("Discovery avty_t must be exactly linkey/status")
+    topics = topics_for_mac(topic_mac)
+    if config.get("stat_t") != topics["state"]:
+        fail(f"Discovery stat_t must be exactly {topics['state']}")
+    if config.get("avty_t") != topics["status"]:
+        fail(f"Discovery avty_t must be exactly {topics['status']}")
 
     components = config.get("cmps")
     if not isinstance(components, dict):
@@ -201,31 +209,35 @@ def assert_discovery(
         if not isinstance(uniq_id, str) or not uniq_id.startswith(f"linkey_{topic_mac}_"):
             fail(f"Discovery component {component} has invalid uniq_id: {uniq_id!r}")
 
+    return topic_mac
 
-def assert_state(messages: list[tuple[str, str]]) -> None:
-    state_payloads = [payload for topic, payload in messages if topic == "linkey/state"]
+
+def assert_state(messages: list[tuple[str, str]], topics: dict[str, str]) -> None:
+    state_payloads = [payload for topic, payload in messages if topic == topics["state"]]
     if not state_payloads:
-        fail("Missing exact MQTT state topic: linkey/state")
+        fail(f"Missing exact MQTT state topic: {topics['state']}")
 
-    state = parse_json("linkey/state", state_payloads[-1])
+    state = parse_json(topics["state"], state_payloads[-1])
     missing = sorted(COMMON_STATE_FIELDS - set(state))
     if missing:
         fail(f"State payload missing common fields: {', '.join(missing)}")
 
 
-def assert_debug_frame(messages: list[tuple[str, str]], mqtt_log: Path, tariff_option: str) -> None:
-    if (DEBUG_REQUEST_TOPIC, DEBUG_REQUEST_PAYLOAD) not in messages:
-        fail(f"Missing exact debug request echo: {DEBUG_REQUEST_TOPIC} {DEBUG_REQUEST_PAYLOAD}")
+def assert_debug_frame(messages: list[tuple[str, str]], mqtt_log: Path, tariff_option: str,
+                       topics: dict[str, str]) -> None:
+    if (topics["debug_request"], DEBUG_REQUEST_PAYLOAD) not in messages:
+        fail(f"Missing exact debug request echo: {topics['debug_request']} {DEBUG_REQUEST_PAYLOAD}")
 
-    if not any(topic == DEBUG_FRAME_TOPIC for topic, _ in messages):
-        fail(f"Missing exact MQTT debug TIC frame topic: {DEBUG_FRAME_TOPIC}")
+    if not any(topic == topics["debug_frame"] for topic, _ in messages):
+        fail(f"Missing exact MQTT debug TIC frame topic: {topics['debug_frame']}")
 
     log_bytes = mqtt_log.read_bytes()
-    frame_start = log_bytes.rfind(DEBUG_FRAME_TOPIC_BYTES)
+    debug_frame_topic_bytes = f"{topics['debug_frame']} ".encode()
+    frame_start = log_bytes.rfind(debug_frame_topic_bytes)
     if frame_start < 0:
-        fail(f"Missing debug TIC frame marker in MQTT log: {DEBUG_FRAME_TOPIC}")
+        fail(f"Missing debug TIC frame marker in MQTT log: {topics['debug_frame']}")
 
-    frame_bytes = log_bytes[frame_start + len(DEBUG_FRAME_TOPIC_BYTES):]
+    frame_bytes = log_bytes[frame_start + len(debug_frame_topic_bytes):]
     expected_frame = EXPECTED_DEBUG_FRAMES[tariff_option]
     if not frame_bytes.startswith(expected_frame):
         fail(f"Debug TIC frame payload does not exactly match mocked {tariff_option} frame")
@@ -247,10 +259,11 @@ def main() -> int:
         fail("MQTT log is empty")
 
     assert_qemu_log(args.qemu_log)
-    assert_status(messages)
-    assert_discovery(messages, args.tariff_option)
-    assert_state(messages)
-    assert_debug_frame(messages, args.mqtt_log, args.tariff_option)
+    topic_mac = assert_discovery(messages, args.tariff_option)
+    topics = topics_for_mac(topic_mac)
+    assert_status(messages, topics)
+    assert_state(messages, topics)
+    assert_debug_frame(messages, args.mqtt_log, args.tariff_option, topics)
 
     print(f"MQTT QEMU assertions OK for tariff_option={args.tariff_option}")
     return 0

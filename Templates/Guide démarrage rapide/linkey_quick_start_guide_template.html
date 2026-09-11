@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linkey — Guide de démarrage</title>
+
+<style>
+  :root{
+    --linkey-green:#31c34b;
+    --ink:#111;
+    --muted:#6a6a6a;
+    --paper:#fff;
+    --line:#d9d9d9;
+    --card-w:85.60mm;
+    --card-h:53.98mm;
+    --safe:4mm;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    width:85.60mm;
+    margin:0;
+    padding:0;
+    background:#fff;
+    color:var(--ink);
+    font-family:Arial, Helvetica, sans-serif;
+  }
+
+  .card{
+    width:var(--card-w);
+    height:var(--card-h);
+    position:relative;
+    overflow:hidden;
+    background:var(--paper);
+    border-radius:0;
+    box-shadow:none;
+    break-after:page;
+    page-break-after:always;
+  }
+
+  .card:last-of-type{
+    break-after:auto;
+    page-break-after:auto;
+  }
+
+  .safe{
+    position:absolute;
+    inset:var(--safe);
+  }
+
+  /* ---------- Identité ---------- */
+  .brand{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:4mm;
+    margin-bottom:2.2mm;
+  }
+
+  .logo{
+    flex:0 0 auto;
+    width:25mm;
+    height:auto;
+    display:flex;
+    align-items:center;
+  }
+
+  .logo img{
+    display:block;
+    width:100%;
+    height:auto;
+    max-height:6mm;
+    object-fit:contain;
+    object-position:right center;
+  }
+
+  .kicker{
+    font-size:2.2mm;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.11em;
+    color:#555;
+    white-space:nowrap;
+  }
+
+  .header-id{
+    display:flex;
+    flex-direction:column;
+    gap:.45mm;
+  }
+
+  .device-name{
+    font-size:2.2mm;
+    line-height:1;
+    color:#333;
+    font-weight:800;
+    overflow-wrap:anywhere;
+  }
+
+  /* ---------- RECTO ---------- */
+  .front .safe{
+    display:flex;
+    flex-direction:column;
+  }
+
+  .front-content{
+    display:grid;
+    grid-template-columns:minmax(0, 1.05fr) minmax(29mm, .95fr);
+    gap:2.4mm;
+    flex:1;
+    min-height:0;
+  }
+
+  .steps{
+    display:flex;
+    flex-direction:column;
+    gap:1mm;
+    min-height:0;
+  }
+
+  .front-side{
+    display:flex;
+    flex-direction:column;
+    gap:1.4mm;
+    align-items:stretch;
+    min-width:0;
+  }
+
+  .step{
+    display:grid;
+    grid-template-columns:4.8mm 1fr;
+    gap:1.15mm;
+    align-items:start;
+  }
+
+  .num{
+    width:4.8mm;
+    height:4.8mm;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    background:var(--linkey-green);
+    color:#fff;
+    font-weight:900;
+    font-size:2.45mm;
+    line-height:1;
+  }
+
+  .step h2{
+    margin:.05mm 0 .3mm;
+    font-size:2.35mm;
+    line-height:1.06;
+  }
+
+  .step p{
+    margin:0;
+    font-size:1.9mm;
+    line-height:1.17;
+    color:#333;
+  }
+
+  .mqtt-credentials{
+    border:.25mm solid var(--line);
+    border-radius:1.8mm;
+    padding:1mm 1.1mm;
+    display:grid;
+    gap:.75mm;
+    background:#fafafa;
+  }
+
+  .credential-row{
+    display:grid;
+    grid-template-columns:13.2mm minmax(0,1fr);
+    gap:.9mm;
+    align-items:center;
+    min-width:0;
+  }
+
+  .credential-row span{
+    font-size:1.65mm;
+    line-height:1;
+    color:#555;
+    font-weight:800;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+
+  .credential-row strong{
+    display:block;
+    min-width:0;
+    font-size:1.75mm;
+    line-height:1.15;
+    font-family:"Arial Narrow", Arial, Helvetica, sans-serif;
+    overflow-wrap:anywhere;
+    font-weight:800;
+  }
+
+  .provision-panel{
+    align-self:start;
+    width:100%;
+    border:.3mm solid var(--line);
+    border-radius:2.3mm;
+    padding:.25mm 1.3mm;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    min-width:0;
+  }
+
+  .provision-qr{
+    width:20mm;
+    height:20mm;
+    border:0;
+    background:
+      linear-gradient(45deg,#f7f7f7 25%,transparent 25%) 0 0/3mm 3mm,
+      linear-gradient(-45deg,#f7f7f7 25%,transparent 25%) 0 0/3mm 3mm,
+      #fff;
+    display:grid;
+    place-items:center;
+    text-align:center;
+    padding:1.1mm;
+    font-weight:900;
+    font-size:2.05mm;
+    line-height:1.1;
+  }
+
+  .provision-qr img{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+  }
+
+  .front-note{
+    border-top:.25mm solid var(--line);
+    padding-top:1.25mm;
+    margin-top:1.25mm;
+    display:flex;
+    gap:1.2mm;
+    align-items:center;
+    font-size:2.0mm;
+    line-height:1.18;
+    color:#333;
+  }
+
+  .turn{
+    flex:0 0 auto;
+    width:auto;
+    height:auto;
+    color:var(--linkey-green);
+    font-weight:900;
+    font-size:3mm;
+    line-height:1;
+  }
+
+  /* ---------- VERSO ---------- */
+  .back .safe{
+    display:flex;
+    flex-direction:column;
+  }
+
+  .back-title{
+    margin:0;
+    text-align:center;
+    font-size:3.25mm;
+    line-height:1.1;
+    font-weight:800;
+  }
+
+  .back-subtitle{
+    margin:1mm 0 2.3mm;
+    text-align:center;
+    font-size:2.2mm;
+    color:#444;
+    line-height:1.2;
+  }
+
+  .qr-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:4.5mm;
+    align-items:start;
+    justify-items:center;
+  }
+
+  .qr-block{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:1mm;
+  }
+
+  .qr{
+    width:20mm;
+    height:20mm;
+    border:.3mm solid var(--line);
+    border-radius:2.3mm;
+    background:#fff;
+    display:grid;
+    place-items:center;
+    text-align:center;
+    padding:1.1mm;
+    font-weight:900;
+    font-size:2.35mm;
+    line-height:1.15;
+  }
+
+  .qr img{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+  }
+
+  .store{
+    font-size:2.45mm;
+    font-weight:800;
+    text-align:center;
+  }
+
+  .store-badge{
+    display:block;
+    width:25mm;
+    height:auto;
+    max-height:7.6mm;
+    object-fit:contain;
+  }
+
+  .store-note{
+    font-size:1.85mm;
+    color:#666;
+    text-align:center;
+  }
+
+  .accent{ color:var(--linkey-green); font-weight:800; }
+
+  /* Champs modifiables à l'écran */
+  [contenteditable="true"]{
+    outline:none;
+  }
+  [contenteditable="true"]:focus{
+    background:#fffbd7;
+    box-shadow:0 0 0 1px #e7d84e;
+  }
+
+  /* Impression recto/verso : 1 face par page au format exact */
+  @page{
+    size:85.60mm 53.98mm;
+    margin:0;
+  }
+
+  @media print{
+    .card{
+      width:85.60mm;
+      height:53.98mm;
+    }
+  }
+</style>
+</head>
+
+<body>
+
+<article class="card front">
+      <div class="safe">
+
+        <header class="brand">
+          <div class="header-id">
+            <div class="kicker" contenteditable="true">Guide de démarrage</div>
+            <div class="device-name" contenteditable="true">Linkey_MAC</div>
+          </div>
+          <div class="logo">
+            <img src="../../Doc/images/logo_linkey.png" alt="Linkey">
+          </div>
+        </header>
+
+        <div class="front-content">
+
+          <div class="steps">
+
+            <section class="step">
+              <div class="num">1</div>
+              <div>
+                <h2 contenteditable="true">Brancher votre clé</h2>
+                <p contenteditable="true">Insérez votre clé sur le port TIC du compteur Linky. Attendre que la LED clignote en BLANC.</p>
+              </div>
+            </section>
+
+            <section class="step">
+              <div class="num">2</div>
+              <div>
+                <h2 contenteditable="true">Configurer le Wi-Fi <span class="accent">*</span></h2>
+                <p contenteditable="true">Ouvrez l'app Espressif, scannez le QR code ci-contre, puis saisissez vos identifiants Wi-Fi.</p>
+              </div>
+            </section>
+
+            <section class="step">
+              <div class="num">3</div>
+              <div>
+                <h2 contenteditable="true">Configurer MQTT</h2>
+                <p contenteditable="true">Créez l'utilisateur ci-contre dans Home Assistant.</p>
+              </div>
+            </section>
+
+          </div>
+
+          <aside class="front-side">
+            <section class="provision-panel">
+              <!--
+                Remplacez le contenu de .provision-qr par votre vrai QR :
+                <img src="qr-provisioning-linkey.png" alt="QR code de provisioning Linkey">
+              -->
+              <div class="provision-qr">QR CODE<br>PROVISIONING</div>
+            </section>
+
+            <section class="mqtt-credentials" aria-label="Identifiants MQTT">
+              <div class="credential-row">
+                <span>Utilisateur</span>
+                <strong contenteditable="true">{{mqtt_user}}</strong>
+              </div>
+              <div class="credential-row">
+                <span>Mot de passe</span>
+                <strong contenteditable="true">{{mqtt_pass}}</strong>
+              </div>
+            </section>
+          </aside>
+
+        </div>
+
+        <footer class="front-note">
+          <div class="turn">*</div>
+          <div contenteditable="true">
+            Pas encore l'application Espressif ?
+            <span class="accent">Téléchargement au verso.</span>
+          </div>
+        </footer>
+
+      </div>
+</article>
+
+<article class="card back">
+      <div class="safe">
+
+        <header class="brand" style="margin-bottom:1.1mm;">
+          <div class="kicker" contenteditable="true">Application</div>
+        </header>
+
+        <h1 class="back-title" contenteditable="true">Télécharger l'application Espressif</h1>
+        <p class="back-subtitle" contenteditable="true">
+          Scannez le QR code correspondant à votre téléphone.
+        </p>
+
+        <div class="qr-grid">
+
+          <section class="qr-block">
+            <div class="qr">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=512x512&amp;margin=12&amp;data=https%3A%2F%2Fplay.google.com%2Fstore%2Fapps%2Fdetails%3Fid%3Dcom.espressif.provble" alt="QR code Google Play vers ESP BLE Provisioning">
+            </div>
+            <img class="store-badge" src="images/google-play-badge.png" alt="Disponible sur Google Play">
+          </section>
+
+          <section class="qr-block">
+            <div class="qr">
+              <img src="https://api.qrserver.com/v1/create-qr-code/?size=512x512&amp;margin=12&amp;data=https%3A%2F%2Fapps.apple.com%2Fapp%2Fesp-ble-provisioning%2Fid1473590141" alt="QR code App Store vers ESP BLE Provisioning">
+            </div>
+            <img class="store-badge" src="images/app-store-badge.svg" alt="Télécharger dans l'App Store">
+          </section>
+
+        </div>
+
+      </div>
+</article>
+
+</body>
+</html>

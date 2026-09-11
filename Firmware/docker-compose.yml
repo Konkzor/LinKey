@@ -8,13 +8,18 @@ services:
       - ./mosquitto_qemu.conf:/tmp/mosquitto.conf:ro
       - mosquitto-data:/mosquitto/data
       - mosquitto-logs:/mosquitto/log
-    command: ["mosquitto", "-c", "/tmp/mosquitto.conf"]
+    command:
+      - sh
+      - -c
+      - |
+        mosquitto_passwd -b -c /tmp/mosquitto.passwd linkey_ddeeff mqtt-password
+        mosquitto -c /tmp/mosquitto.conf
     environment:
       - TZ=UTC
     networks:
       - linkey-test-network
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-C", "1", "-t", "$$SYS/broker/clients/total"]
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-u", "linkey_ddeeff", "-P", "mqtt-password", "-C", "1", "-t", "$$SYS/broker/clients/total"]
       interval: 10s
       timeout: 5s
       retries: 3

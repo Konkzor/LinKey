@@ -16,12 +16,14 @@
 #include "voltage_manager.h"
 #include "wifi_manager.h"
 #include "mqtt_manager.h"
+#include "provisioning_manager.h"
 #include "debug.h"
 #include "tic_types.h"
 
 static const char *TAG = "LINKY_MAIN";
 
 // RGB LED pin definitions
+#define BOOT_BUTTON_PIN     GPIO_NUM_0
 #define RGB_LED_RED_PIN     GPIO_NUM_13
 #define RGB_LED_GREEN_PIN   GPIO_NUM_15
 #define RGB_LED_BLUE_PIN    GPIO_NUM_2
@@ -38,8 +40,8 @@ static const char *TAG = "LINKY_MAIN";
 #define RGB_WHITE           RGB_COLOR(1, 1, 1)
 
 // State LED color configuration (easily customizable)
-#define LED_COLOR_INIT          RGB_CYAN
 #define LED_COLOR_WAIT_VOLTAGE  RGB_RED
+#define LED_COLOR_BLE_PROVISION RGB_WHITE
 #define LED_COLOR_WIFI_CONNECT     RGB_BLUE
 #define LED_COLOR_MQTT_CONNECT     RGB_MAGENTA
 #define LED_COLOR_WAIT_ULP_DATA      RGB_YELLOW
@@ -48,6 +50,7 @@ static const char *TAG = "LINKY_MAIN";
 // Timeouts (milliseconds)
 #define WIFI_CONNECT_TIMEOUT_MS 6000    // WiFi connection timeout
 #define MQTT_CONNECT_TIMEOUT_MS 1000    // MQTT connection timeout
+#define BOOT_BUTTON_LONG_PRESS_MS 2000  // Hold BOOT/GPIO0 to reprovision
 // Timeout waiting for ULP data: frame-level reception needs at least 2 frame periods
 // (partial frame + first complete frame) before valid data is available
 #if defined(CONFIG_LINKEY_TARIFF_TEMPO)
@@ -61,12 +64,12 @@ static const char *TAG = "LINKY_MAIN";
 #endif
 #define POLL_INTERVAL_MS        100     // Polling interval in connect/wait loops
 
-static app_state_t current_state = STATE_INIT;
+static app_state_t current_state = STATE_WAIT_VOLTAGE;
 
 // State LED colors lookup table
 static const uint8_t state_colors[] = {
-    LED_COLOR_INIT,
     LED_COLOR_WAIT_VOLTAGE,
+    LED_COLOR_BLE_PROVISION,
     LED_COLOR_WIFI_CONNECT,
     LED_COLOR_MQTT_CONNECT,
     LED_COLOR_WAIT_ULP_DATA,
@@ -84,6 +87,9 @@ static bool ulp_initialized = false;
 
 // Task handle for ULP wake notification
 static TaskHandle_t main_task_handle;
+static TaskHandle_t ble_provision_led_task_handle = NULL;
+static volatile bool ble_provision_led_blinking = false;
+static volatile bool manual_provisioning_requested = false;
 
 // ULP wake ISR: notify main task when a new frame is received
 static void IRAM_ATTR ulp_isr(void *arg)
@@ -92,6 +98,8 @@ static void IRAM_ATTR ulp_isr(void *arg)
     vTaskNotifyGiveFromISR(*(TaskHandle_t *)arg, &woken);
     portYIELD_FROM_ISR(woken);
 }
+
+static bool boot_button_force_allowed(app_state_t state);
 
 static void rgb_led_init(void)
 {
@@ -112,6 +120,25 @@ static void rgb_led_init(void)
     DEBUG_LOG(TAG, "RGB LEDs initialized (R:%d, G:%d, B:%d)", RGB_LED_RED_PIN, RGB_LED_GREEN_PIN, RGB_LED_BLUE_PIN);
 }
 
+static void boot_button_init(void)
+{
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << BOOT_BUTTON_PIN),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
+    DEBUG_LOG(TAG, "BOOT button initialized (GPIO%d)", BOOT_BUTTON_PIN);
+}
+
+static bool boot_button_force_allowed(app_state_t state)
+{
+    return state != STATE_WAIT_VOLTAGE
+        && state != STATE_BLE_PROVISION;
+}
+
 // Set LED to a color (from RGB_COLOR macro)
 static void rgb_led_set(uint8_t color)
 {
@@ -126,6 +153,38 @@ static void rgb_led_blink(uint8_t color, int duration_ms)
     rgb_led_set(color);
     vTaskDelay(pdMS_TO_TICKS(duration_ms));
     rgb_led_set(RGB_OFF);
+}
+
+static void ble_provision_led_task(void *arg)
+{
+    (void)arg;
+
+    while (ble_provision_led_blinking) {
+        rgb_led_blink(LED_COLOR_BLE_PROVISION, 10);
+        vTaskDelay(pdMS_TO_TICKS(1990));
+    }
+
+    rgb_led_set(RGB_OFF);
+    ble_provision_led_task_handle = NULL;
+    vTaskDelete(NULL);
+}
+
+static void ble_provision_led_start(void)
+{
+    if (ble_provision_led_task_handle) {
+        return;
+    }
+
+    ble_provision_led_blinking = true;
+    ESP_ERROR_CHECK(xTaskCreate(ble_provision_led_task, "ble_prov_led", 2048,
+                                NULL, 1, &ble_provision_led_task_handle) == pdPASS
+        ? ESP_OK
+        : ESP_ERR_NO_MEM);
+}
+
+static void ble_provision_led_stop(void)
+{
+    ble_provision_led_blinking = false;
 }
 
 // Stop WiFi and MQTT (WiFi first to cut radio power immediately)
@@ -166,12 +225,13 @@ static conn_result_t ulp_wait_data(void)
 // Forward declarations for state handlers
 static app_state_t handle_state_init(void);
 static app_state_t handle_state_wait_voltage(void);
+static app_state_t handle_state_ble_provision(void);
 static app_state_t handle_state_wifi_connect(void);
 static app_state_t handle_state_mqtt_connect(void);
 static app_state_t handle_state_wait_ulp_data(void);
 static app_state_t handle_state_publish_data(void);
 
-// STATE_INIT: Initialize LED, ADC, pm_config
+// Initialize LED, ADC, pm_config
 static app_state_t handle_state_init(void)
 {
     // Initialize NVS (used for WiFi)
@@ -184,6 +244,7 @@ static app_state_t handle_state_init(void)
 
     // Initialize RGB LEDs
     rgb_led_init();
+    boot_button_init();
 
     // Initialize voltage monitoring
     voltage_init();
@@ -207,11 +268,115 @@ static app_state_t handle_state_wait_voltage(void)
     DEBUG_LOG(TAG, "Supercap voltage: %d mV", voltage_mv);
 
     if (voltage_mv >= VOLTAGE_START_MV) {
-        DEBUG_LOG(TAG, "Voltage sufficient - proceeding to WiFi init");
+        if (!wifi_state.initialized) {
+            DEBUG_LOG(TAG, "Initializing WiFi...");
+            wifi_init(&wifi_state);
+        }
+
+        if (!wifi_has_config()) {
+            DEBUG_LOG(TAG, "Voltage sufficient but WiFi is not provisioned");
+            return STATE_BLE_PROVISION;
+        }
+
+        DEBUG_LOG(TAG, "Voltage sufficient - proceeding to WiFi connect");
         return STATE_WIFI_CONNECT;
     }
 
     return STATE_WAIT_VOLTAGE;
+}
+
+// STATE_BLE_PROVISION: Provision WiFi credentials over BLE
+static app_state_t handle_state_ble_provision(void)
+{
+    if (!wifi_state.initialized) {
+        DEBUG_LOG(TAG, "Initializing WiFi for provisioning...");
+        wifi_init(&wifi_state);
+    }
+
+    DEBUG_LOG(TAG, "Starting BLE WiFi provisioning...");
+    ble_provision_led_start();
+    conn_result_t result = provisioning_start_ble(VOLTAGE_FALLBACK_MIN_MV,
+                                                 POLL_INTERVAL_MS);
+    ble_provision_led_stop();
+    if (result == CONN_OK) {
+        DEBUG_LOG(TAG, "WiFi credentials stored - returning to WAIT_VOLTAGE");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+    if (result == CONN_VOLTAGE_LOW) {
+        DEBUG_LOGW(TAG, "Voltage too low - returning to WAIT_VOLTAGE");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+
+    if (wifi_has_config()) {
+        DEBUG_LOGW(TAG, "BLE provisioning failed - keeping previous credentials");
+        stop_all_connections();
+        return STATE_WAIT_VOLTAGE;
+    }
+
+    DEBUG_LOGW(TAG, "BLE provisioning failed - retrying");
+    stop_all_connections();
+    return STATE_BLE_PROVISION;
+}
+
+static void poll_boot_button_for_reprovision(void)
+{
+    static bool was_pressed = false;
+    static bool must_release = false;
+    static uint32_t pressed_ms = 0;
+    static TickType_t last_poll_tick = 0;
+    TickType_t now = xTaskGetTickCount();
+    uint32_t elapsed_ms = (last_poll_tick == 0)
+        ? 0
+        : pdTICKS_TO_MS(now - last_poll_tick);
+    bool pressed = gpio_get_level(BOOT_BUTTON_PIN) == 0;
+
+    last_poll_tick = now;
+
+    if (!boot_button_force_allowed(current_state)) {
+        was_pressed = false;
+        must_release = false;
+        pressed_ms = 0;
+        return;
+    }
+
+    if (must_release) {
+        // Wait for a release before allowing another long-press request
+        if (!pressed) {
+            must_release = false;
+            pressed_ms = 0;
+        }
+        return;
+    } else if (pressed) {
+        // Start timing on a fresh press
+        if (!was_pressed) {
+            pressed_ms = 0;
+        } else {
+            pressed_ms += elapsed_ms;
+        }
+        // If the button has been pressed long enough:
+        //  - request manual provisioning
+        //  - and block further requests until the button is released
+        if (pressed_ms >= BOOT_BUTTON_LONG_PRESS_MS) {
+            manual_provisioning_requested = true;
+            must_release = true;
+        }
+    }
+
+    was_pressed = pressed;
+}
+
+static void handle_manual_provisioning_request(void)
+{
+    poll_boot_button_for_reprovision();
+
+    if (manual_provisioning_requested) {
+        manual_provisioning_requested = false;
+        DEBUG_LOGW(TAG, "BOOT button long pressed - requesting WiFi provisioning");
+        stop_all_connections();
+        current_state = STATE_BLE_PROVISION;
+    }
 }
 
 // STATE_WIFI_CONNECT: Initialize WiFi (once) and connect
@@ -260,7 +425,7 @@ static app_state_t handle_state_mqtt_connect(void)
                                         VOLTAGE_FALLBACK_MIN_MV, wifi_is_connected,
                                         MQTT_CONNECT_TIMEOUT_MS, POLL_INTERVAL_MS);
     if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
-        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+        DEBUG_LOGW(TAG, "%s", result == CONN_VOLTAGE_LOW
             ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
             : "WiFi lost during MQTT connect - returning to WIFI_CONNECT");
         stop_all_connections();
@@ -289,7 +454,7 @@ static app_state_t handle_state_wait_ulp_data(void)
 
     conn_result_t result = ulp_wait_data();
     if (result == CONN_VOLTAGE_LOW || result == CONN_WIFI_LOST) {
-        DEBUG_LOGW(TAG, result == CONN_VOLTAGE_LOW
+        DEBUG_LOGW(TAG, "%s", result == CONN_VOLTAGE_LOW
             ? "Voltage too low - stopping WiFi and returning to WAIT_VOLTAGE"
             : "WiFi or MQTT lost during ULP wait - returning to WIFI_CONNECT");
         stop_all_connections();
@@ -353,7 +518,9 @@ static app_state_t handle_state_publish_data(void)
 void app_main(void)
 {
     DEBUG_LOG(TAG, "Starting FSM...");
-    app_state_t previous_state = STATE_INIT;
+
+    current_state = handle_state_init();
+    app_state_t previous_state = current_state;
 
     while (1) {
         // Reset dynamic peak tracker on state transitions into dynamic states
@@ -364,10 +531,9 @@ void app_main(void)
             previous_state = current_state;
         }
 
-        // Voltage check only possible after INIT (ADC must be initialized first).
         // STATE_WIFI_CONNECT uses the fixed floor (peak hasn't been built up yet);
         // every other connected state uses the dynamic drop-from-peak threshold.
-        if (current_state != STATE_INIT && current_state != STATE_WAIT_VOLTAGE) {
+        if (current_state != STATE_WAIT_VOLTAGE) {
             bool low = (current_state == STATE_WIFI_CONNECT)
                 ? voltage_is_low(VOLTAGE_FALLBACK_MIN_MV)
                 : voltage_is_low_dynamic(VOLTAGE_FALLBACK_MIN_MV);
@@ -378,19 +544,21 @@ void app_main(void)
             }
         }
 
+        handle_manual_provisioning_request();
+
         // Blink LED for current state (10ms)
         rgb_led_blink(state_colors[current_state], 10);
 
         // Handle current state
         switch (current_state) {
-            case STATE_INIT:
-                current_state = handle_state_init();
-                break;
             case STATE_WAIT_VOLTAGE:
                 current_state = handle_state_wait_voltage();
                 break;
             case STATE_WIFI_CONNECT:
                 current_state = handle_state_wifi_connect();
+                break;
+            case STATE_BLE_PROVISION:
+                current_state = handle_state_ble_provision();
                 break;
             case STATE_MQTT_CONNECT:
                 current_state = handle_state_mqtt_connect();

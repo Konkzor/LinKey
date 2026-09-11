@@ -56,6 +56,25 @@ void wifi_stop(wifi_state_t *state);
 void wifi_start(wifi_state_t *state);
 
 /**
+ * @brief Check whether a non-empty STA SSID is configured in the WiFi driver.
+ *
+ * With WiFi NVS enabled, this reflects credentials provisioned by ESP-IDF's
+ * provisioning manager after esp_wifi_init() has loaded stored config.
+ *
+ * @return true if STA credentials are present, false otherwise
+ */
+bool wifi_has_config(void);
+
+/**
+ * @brief Synchronize state after another component starts WiFi.
+ *
+ * The provisioning manager owns esp_wifi_start() while provisioning. Call this
+ * after provisioning succeeds so the normal WiFi manager state matches the
+ * driver state.
+ */
+void wifi_mark_started(wifi_state_t *state);
+
+/**
  * @brief Connect to WiFi AP with voltage monitoring
  *
  * Attempts connection with periodic voltage checks. Uses cached BSSID/channel

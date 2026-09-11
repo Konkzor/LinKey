@@ -2,46 +2,49 @@ menu "Linkey Monitor Configuration"
 
     config LINKEY_DEVICE_NAME
         string "Device Name"
-        default "Linkey"
-        help
-            Device name shown in Home Assistant.
-
-    config LINKEY_WIFI_SSID
-        string "WiFi SSID"
         default ""
         help
-            SSID (network name) for the example to connect to.
-
-    config LINKEY_WIFI_PASSWORD
-        string "WiFi Password"
-        default ""
-        help
-            WiFi password (WPA or WPA2) for the example to use.
+            Optional Home Assistant device name override.
+            Leave empty to use Linkey_<last 6 hex digits of the WiFi MAC>.
 
     config LINKEY_MQTT_BROKER_URI
         string "MQTT Broker URI"
-        default "mqtt://192.168.1.100"
+        default "mqtt://homeassistant.local:1883"
         help
-            URI of the MQTT broker to connect to.
+            Fallback URI of the MQTT broker to connect to.
             Example: mqtt://192.168.1.100 or mqtts://mqtt.example.com
+
+    config LINKEY_MQTT_AUTODISCOVERY
+        bool "Auto-discover MQTT broker with mDNS"
+        default y
+        help
+            Query Home Assistant _home-assistant._tcp.local and use port 1883
+            on the discovered host.
+            If discovery fails, the firmware falls back to LINKEY_MQTT_BROKER_URI.
 
     config LINKEY_MQTT_USERNAME
         string "MQTT Username"
         default ""
         help
-            Username for MQTT broker authentication (leave empty if not required).
+            Username for MQTT broker authentication.
+            Leave empty to use the runtime default linkey_<last 6 hex digits
+            of the WiFi MAC address>, for example linkey_8ebde0.
 
     config LINKEY_MQTT_PASSWORD
         string "MQTT Password"
         default ""
         help
-            Password for MQTT broker authentication (leave empty if not required).
+            Optional development override for the MQTT password.
+            Leave empty to use the fallback defined in factory_config_schema.h,
+            or the per-device value from the factory_data partition when present.
 
-    config LINKEY_MQTT_TOPIC_PREFIX
-        string "MQTT Topic Prefix"
-        default "linkey"
+    config LINKEY_PROV_POP
+        string "Provisioning Proof of Possession"
+        default ""
         help
-            Prefix for MQTT topics. Topics will be: <prefix>/state, <prefix>/status
+            Optional development override for the Espressif provisioning PoP.
+            Leave empty to use the fallback defined in factory_config_schema.h,
+            or the per-device value from the factory_data partition when present.
 
     config LINKEY_USE_STATIC_IP
         bool "Use Static IP (faster connection)"

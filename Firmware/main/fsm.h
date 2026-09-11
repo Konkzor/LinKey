@@ -23,8 +23,8 @@ extern "C" {
  * @brief Application FSM states.
  */
 typedef enum {
-    STATE_INIT,
     STATE_WAIT_VOLTAGE,
+    STATE_BLE_PROVISION,
     STATE_WIFI_CONNECT,
     STATE_MQTT_CONNECT,
     STATE_WAIT_ULP_DATA,
@@ -56,8 +56,8 @@ app_state_t fsm_after_publish_data(bool voltage_low,
 /**
  * @brief Voltage watchdog: if @p voltage_low is true and the current state
  *        runs after init, return STATE_WAIT_VOLTAGE; otherwise return
- *        @p current unchanged. STATE_INIT and STATE_WAIT_VOLTAGE pass
- *        through (their own logic owns the voltage check).
+ *        @p current unchanged. STATE_WAIT_VOLTAGE passes through because its
+ *        own logic owns the voltage check.
  */
 app_state_t fsm_voltage_watchdog_next(app_state_t current, bool voltage_low);
 
