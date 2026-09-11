@@ -350,14 +350,25 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ### 6. Provisionner le WiFi
 
-Au premier démarrage, si aucun identifiant WiFi n'est stocké :
+Au premier démarrage, si aucun identifiant WiFi n'est stocké, la clé Linkey va clignoter en blanc :
 
 1. Ouvrir l'application Espressif de provisioning.
 2. Scanner le QR code affiché dans le moniteur série si les logs de debug sont activés, ou sélectionner manuellement le périphérique BLE `Linkey_XXXXXX`, puis entrer le *Proof of Possession* configuré dans `menuconfig`.
 3. Saisir le SSID et le mot de passe WiFi manuellement (la recherche de réseaux par l'ESP32 est volontairement désactivée).
 4. L'application doit terminer avec succès. Le firmware arrête ensuite le provisioning et attend à nouveau une tension suffisante avant de se connecter au WiFi.
 
-Pour reprovisionner un appareil déjà configuré, maintenir BOOT/GPIO0 plus de 2 s pendant que l'appareil est dans un état actif. Les identifiants existants restent présents tant que l'application ne soumet pas de nouveaux identifiants.
+Pour reprovisionner un appareil déjà configuré, maintenir le bouton BOOT pendant que l'appareil est dans un état actif (sous tension et pas en clignotement rouge) :
+1. Retirer la partie supérieure du boîtier.
+2. Appuyer avec l'ongle sur le bouton BOOT (ecnadré rouge sur photo ci-dessous) jusqu'à ce que la LED clignote en blanc.
+
+<p align="center">
+  <img src="../Doc/images/photo_bouton_BOOT.jpg" width="300" alt="Photo bouton BOOT (pvosioning)">
+</p>
+
+> Note : Les identifiants existants restent présents tant que l'application ne soumet pas de nouveaux identifiants.
+
+> Note : L'ouverture du boîtier est nécessaire (PCB v1.1 et mécanique v2.0). Une version mécanique future pourrait ajouter un bouton ne nécessitant pas l'ouverture du boîtier.
+
 
 ## Tests
 
