@@ -213,11 +213,19 @@ Ainsi que la liste de ses "Capteurs" :
   <img src="../Doc/images/capture_homeassistant_capteurs.png" width="300" alt="Capture écran HA capteurs">
 </p>
 
-On y trouve entre autres :
+Où on y trouve entre autres les infos principales de la TIC :
 - **Courant** (IINST) — mesure instantanée
 - **Index d'énergie** (BASE, HPHC, TEMPO, etc.) — *total increasing*. Ces index sont facilement utilisables dans le tableau de bord "Energie" (une fois associés à des prix du kWh pour chaque période tarifaire)
 - **Puissance apparente** (PAPP) — mesure instantanée
 - **Avertissement de surintensité** (ADPS) — alerte de surcharge
+
+Et des topics de diagnostic :
+
+<p align="center">
+  <img src="../Doc/images/capture_homeassistant_diagnostics.png" width="300" alt="Capture écran HA diagnostics">
+</p>
+
+Où l'on peut trouver des infos de diagnostic :
 - **Tension supercondensateur** (VCAP) — mesure instantanée
 - **Uptime** — temps de fonctionnement en secondes
 

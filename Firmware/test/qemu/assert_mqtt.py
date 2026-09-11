@@ -209,6 +209,10 @@ def assert_discovery(
         if not isinstance(uniq_id, str) or not uniq_id.startswith(f"linkey_{topic_mac}_"):
             fail(f"Discovery component {component} has invalid uniq_id: {uniq_id!r}")
 
+    for component in ("vcap", "uptime"):
+        if components[component].get("ent_cat") != "diagnostic":
+            fail(f"Discovery component {component} must be diagnostic")
+
     return topic_mac
 
 
